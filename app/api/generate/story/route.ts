@@ -207,6 +207,8 @@ EXAMPLE: "Federal Reserve Governor Adriana Kugler <a href="${sourceUrl}">announc
 
 DEBUG INFO: sourceUrl = "${sourceUrl}"
 
+REMEMBER: The hyperlink in the lead paragraph is MANDATORY and NOT optional.
+
 CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have more information, create additional paragraphs.
 
 - IMPORTANT: In your lead, if the source text or PR/article date mentions a specific day, use that date. If no specific date is mentioned, use today's date or "recently" as appropriate. Do not force price movement timing if the news is not about stock price changes.
@@ -264,6 +266,16 @@ ${relatedArticles && relatedArticles.length > 0 ? `
 - After the price action, add a "Read Next:" section with the following format:
   Read Next: <a href="${relatedArticles[1]?.url || relatedArticles[0].url}">${relatedArticles[1]?.headline || relatedArticles[0].headline}</a>
 ` : ''}
+
+WRITING STYLE: Write in a direct, conversational tone that sounds natural and engaging. Avoid overly formal or AI-like language such as "garnered attention," "expressed a favorable outlook," or "emphasized that." Instead, use simple, clear language that flows naturally.
+
+Examples of what to avoid:
+- "garnered attention from" → "caught the eye of" or "drew comments from"
+- "expressed a favorable outlook" → "said he likes" or "is bullish on"
+- "emphasized that" → "noted" or "said"
+- "encounter volatility" → "face ups and downs" or "see price swings"
+
+CRITICAL: You MUST include exactly one hyperlink in the lead paragraph using the format <a href="${sourceUrl}">[three consecutive words]</a>. This is NOT optional - every lead paragraph must have this hyperlink.
 
 Keep the tone neutral and informative, suitable for a financial news audience. Do not include speculation or personal opinion. 
 

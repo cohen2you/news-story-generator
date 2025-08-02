@@ -1021,7 +1021,7 @@ export default function PRStoryGeneratorPage() {
                   cursor: loadingContext ? 'not-allowed' : 'pointer'
                 }}
               >
-                {loadingContext ? 'Adding Context...' : 'Add Context'}
+                {loadingContext ? 'Adding Benzinga Context...' : 'Add Benzinga Context'}
               </button>
               <button
                 onClick={handleCopyArticle}
