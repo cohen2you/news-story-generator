@@ -27,7 +27,8 @@ export async function POST(req: Request) {
   try {
     const { ticker } = await req.json();
     console.log('Price action request for ticker:', ticker); // Log the ticker
-    if (!ticker) return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
+    // Ticker is optional - return empty price action if no ticker provided
+  if (!ticker) return NextResponse.json({ priceAction: null });
     const url = `${BZ_PRICE_URL}?token=${BENZINGA_API_KEY}&symbols=${encodeURIComponent(ticker)}`;
     const res = await fetch(url);
     if (!res.ok) {

@@ -6,7 +6,8 @@ const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 export async function POST(req: Request) {
   try {
     const { ticker, count } = await req.json();
-    if (!ticker) return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
+    // Ticker is optional - return empty articles if no ticker provided
+  if (!ticker) return NextResponse.json({ articles: [] });
     // Fetch more items to ensure enough non-PR articles after filtering
     const desiredCount = count && typeof count === 'number' ? count : 6;
     const items = Math.max(desiredCount * 2, 20);

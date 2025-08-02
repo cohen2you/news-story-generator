@@ -13,7 +13,8 @@ function get7DaysAgo() {
 export async function POST(req: Request) {
   try {
     const { ticker } = await req.json();
-    if (!ticker) return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
+    // Ticker is optional - return empty PRs if no ticker provided
+  if (!ticker) return NextResponse.json({ prs: [] });
 
     const dateFrom = get7DaysAgo();
     const url = `${BZ_NEWS_URL}?token=${BENZINGA_PR_API_KEY}&tickers=${encodeURIComponent(ticker)}&channels=press-releases&items=10&fields=headline,title,created,body,teaser,id,url,channels&accept=application/json&displayOutput=full&dateFrom=${dateFrom}`;

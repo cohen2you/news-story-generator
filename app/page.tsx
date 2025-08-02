@@ -46,6 +46,7 @@ export default function PRStoryGeneratorPage() {
   const [includeSubheads, setIncludeSubheads] = useState(false);
   const [loadingContext, setLoadingContext] = useState(false);
   const [contextError, setContextError] = useState('');
+  const [previouslyUsedContextUrls, setPreviouslyUsedContextUrls] = useState<string[]>([]);
 
   // Client-only: Convert PR or Article HTML body to plain text when selected
   useEffect(() => {
@@ -70,10 +71,14 @@ export default function PRStoryGeneratorPage() {
     console.log('Ticker:', ticker); // Debug log for ticker state
   }, [ticker]);
 
+  useEffect(() => {
+    console.log('Source URL state:', sourceUrl); // Debug log for sourceUrl state
+  }, [sourceUrl]);
+
   // Fetch PRs for ticker
   const fetchPRs = async () => {
     if (!ticker.trim()) {
-      setTickerError('Ticker is required');
+      // Allow empty ticker - no validation required
       return;
     }
     setLoadingPRs(true);
@@ -167,42 +172,119 @@ export default function PRStoryGeneratorPage() {
 
   // Generate article (stub OpenAI call)
   const generateArticle = async () => {
+    console.log('Generate Article clicked. Ticker:', ticker, 'Primary text length:', primaryText.length);
     setGenerating(true);
     setGenError('');
     setArticle('');
     setLoadingStory(true);
 
-    // Fetch analyst ratings and price action in parallel and use their returned values
-    const [analyst, price] = await Promise.all([
-      (async () => {
-        try {
-          const res = await fetch('/api/generate/analyst-ratings', {
+    // If no primary text is provided, try to fetch the latest PR or article (only if ticker is provided)
+    let sourceText = primaryText;
+    let createdDateStr = null;
+    
+    if (!sourceText.trim() && ticker.trim()) {
+      try {
+        // First try to fetch the latest PR
+        const prRes = await fetch('/api/bz/prs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker }),
+        });
+        const prData = await prRes.json();
+        
+        if (prRes.ok && prData.prs && prData.prs.length > 0) {
+          const latestPR = prData.prs[0]; // Get the most recent PR
+          if (typeof window !== 'undefined') {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = latestPR.body;
+            sourceText = tempDiv.textContent || tempDiv.innerText || '';
+          }
+          setSourceUrl(latestPR.url || '');
+          createdDateStr = latestPR.created;
+          setSelectedPR(latestPR);
+          setSelectedArticle(null);
+          setHideUnselectedPRs(true);
+          setHideUnselectedArticles(false);
+        } else {
+          // If no PRs, try to fetch the latest article
+          const articleRes = await fetch('/api/bz/articles', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker }),
+            body: JSON.stringify({ ticker, count: 1 }),
           });
-          const data = await res.json();
-          return (data.ratings && data.ratings.length > 0)
-            ? data.ratings.join(' ')
-            : 'No recent analyst ratings available.';
-        } catch {
-          return 'Failed to fetch analyst ratings.';
+          const articleData = await articleRes.json();
+          
+          if (articleRes.ok && articleData.articles && articleData.articles.length > 0) {
+            const latestArticle = articleData.articles[0]; // Get the most recent article
+            if (typeof window !== 'undefined') {
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = latestArticle.body;
+              sourceText = tempDiv.textContent || tempDiv.innerText || '';
+            }
+            setSourceUrl(latestArticle.url || '');
+            createdDateStr = latestArticle.created;
+            setSelectedArticle(latestArticle);
+            setSelectedPR(null);
+            setHideUnselectedArticles(true);
+            setHideUnselectedPRs(false);
+          } else {
+            throw new Error('No recent press releases or articles found for this ticker. Please fetch PRs or articles first, or provide content manually.');
+          }
         }
-      })(),
-      (async () => {
-        try {
-          const res = await fetch('/api/bz/priceaction', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker }),
-          });
-          const data = await res.json();
-          return data.priceAction || 'No recent price action available.';
-        } catch {
-          return 'Failed to fetch price action.';
-        }
-      })()
-    ]);
+      } catch (error: any) {
+        setGenError(error.message || 'Failed to fetch source content. Please provide content manually or fetch PRs/articles first.');
+        setGenerating(false);
+        setLoadingStory(false);
+        return;
+      }
+    } else if (!sourceText.trim() && !ticker.trim()) {
+      // If no source text and no ticker, show error
+      setGenError('Please provide either a ticker or source content to generate a story.');
+      setGenerating(false);
+      setLoadingStory(false);
+      return;
+    } else {
+      // Use existing source URL and date from selected PR or article
+      // sourceUrl state is already set by handleSelectPR/handleSelectArticle
+      createdDateStr = selectedPR?.created || selectedArticle?.created || null;
+    }
+
+    // Fetch analyst ratings and price action in parallel and use their returned values (only if ticker is provided)
+    let analyst = 'No recent analyst ratings available.';
+    let price = '';
+    
+    if (ticker.trim()) {
+      [analyst, price] = await Promise.all([
+        (async () => {
+          try {
+            const res = await fetch('/api/generate/analyst-ratings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker }),
+            });
+            const data = await res.json();
+            return (data.ratings && data.ratings.length > 0)
+              ? data.ratings.join(' ')
+              : 'No recent analyst ratings available.';
+          } catch {
+            return 'Failed to fetch analyst ratings.';
+          }
+        })(),
+        (async () => {
+          try {
+            const res = await fetch('/api/bz/priceaction', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker }),
+            });
+            const data = await res.json();
+            return data.priceAction || 'No recent price action available.';
+          } catch {
+            return 'Failed to fetch price action.';
+          }
+        })()
+      ]);
+    }
 
     setAnalystSummary(analyst);
     setPriceSummary(price);
@@ -211,7 +293,6 @@ export default function PRStoryGeneratorPage() {
       // Calculate storyDay and storyDate for the selected PR, article, or analyst note
       let storyDay = '';
       let storyDate = '';
-      let createdDateStr = selectedPR?.created || selectedArticle?.created || null;
       let dateReference = '';
       let sourceDateFormatted = '';
       
@@ -230,9 +311,9 @@ export default function PRStoryGeneratorPage() {
         }
         // Format the actual date for reference in paragraphs
         sourceDateFormatted = createdDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-      } else if (primaryText && ticker && !selectedPR && !selectedArticle) {
+      } else if (sourceText && ticker && !selectedPR && !selectedArticle) {
         // For analyst notes, try to extract date from the text first
-        const dateMatch = primaryText.match(/(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
+        const dateMatch = sourceText.match(/(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
         if (dateMatch) {
           const [_, day, month, year] = dateMatch;
           const analystDate = new Date(`${month} ${day}, ${year}`);
@@ -246,6 +327,10 @@ export default function PRStoryGeneratorPage() {
           dateReference = `on ${day}`;
           sourceDateFormatted = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
         }
+      } else {
+        // Fallback for any other case where no date is available
+        const today = new Date();
+        sourceDateFormatted = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
       }
       
       // Calculate priceActionDay for today
@@ -255,22 +340,22 @@ export default function PRStoryGeneratorPage() {
       let ctaText = '';
       let subheadTexts: string[] = [];
       
-      if (includeCTA) {
-        try {
-          const ctaRes = await fetch('/api/generate/cta-line', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker }),
-          });
-          const ctaData = await ctaRes.json();
-          if (ctaData.cta) {
-            ctaText = ctaData.cta;
-            setCta(ctaData.cta);
-          }
-        } catch (error) {
-          console.error('Failed to generate CTA:', error);
-        }
-      }
+             if (includeCTA && ticker.trim()) {
+         try {
+           const ctaRes = await fetch('/api/generate/cta-line', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ ticker }),
+           });
+           const ctaData = await ctaRes.json();
+           if (ctaData.cta) {
+             ctaText = ctaData.cta;
+             setCta(ctaData.cta);
+           }
+         } catch (error) {
+           console.error('Failed to generate CTA:', error);
+         }
+       }
       
       if (includeSubheads) {
         try {
@@ -280,7 +365,7 @@ export default function PRStoryGeneratorPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ticker,
-              sourceText: primaryText,
+              sourceText: sourceText,
               analystSummary: analyst,
               priceSummary: price,
               sourceDate: createdDateStr,
@@ -288,7 +373,7 @@ export default function PRStoryGeneratorPage() {
               storyDate,
               dateReference,
               priceActionDay,
-              sourceUrl: sourceUrl || selectedPR?.url || selectedArticle?.url || '',
+              sourceUrl: sourceUrl,
               sourceDateFormatted,
             }),
           });
@@ -310,27 +395,30 @@ export default function PRStoryGeneratorPage() {
         }
       }
       
-      const requestBody = {
-          ticker,
-          sourceText: primaryText,
-          analystSummary: analyst,
-          priceSummary: price,
-          sourceDate: createdDateStr,
-          storyDay,
-          storyDate,
-          dateReference,
-          priceActionDay,
-          sourceUrl: sourceUrl || selectedPR?.url || selectedArticle?.url || '',
-          sourceDateFormatted,
-          includeCTA,
-          ctaText,
-          includeSubheads,
-          subheadTexts,
-      };
+             const requestBody = {
+           ticker: ticker || '',
+           sourceText: sourceText,
+           analystSummary: analyst,
+           priceSummary: price,
+           sourceDate: createdDateStr,
+           storyDay,
+           storyDate,
+           dateReference,
+           priceActionDay,
+           sourceUrl: sourceUrl,
+           sourceDateFormatted,
+           includeCTA,
+           ctaText,
+           includeSubheads,
+           subheadTexts,
+       };
       
       console.log('Sending to story generation:', requestBody); // Debug log
-      console.log('Primary text length:', primaryText.length); // Debug log
-      console.log('Primary text preview:', primaryText.substring(0, 200)); // Debug log
+      console.log('Source text length:', sourceText.length); // Debug log
+      console.log('Source text preview:', sourceText.substring(0, 200)); // Debug log
+      console.log('Source URL being sent:', sourceUrl); // Debug log
+      console.log('Source URL type:', typeof sourceUrl); // Debug log
+      console.log('Source URL length:', sourceUrl?.length); // Debug log
       
       const res = await fetch('/api/generate/story', {
         method: 'POST',
@@ -340,6 +428,7 @@ export default function PRStoryGeneratorPage() {
       const data = await res.json();
       if (!res.ok || !data.story) throw new Error(data.error || 'Failed to generate story');
       setArticle(data.story);
+      setPreviouslyUsedContextUrls([]); // Clear previously used context URLs when generating new article
     } catch (err: any) {
       setGenError(err.message || 'Failed to generate story');
     } finally {
@@ -351,7 +440,7 @@ export default function PRStoryGeneratorPage() {
   // Fetch 10 newest articles for ticker
   const fetchTenNewestArticles = async () => {
     if (!ticker.trim()) {
-      setTickerError('Ticker is required');
+      // Allow empty ticker - no validation required
       return;
     }
     setLoadingTenArticles(true);
@@ -387,10 +476,12 @@ export default function PRStoryGeneratorPage() {
       // If clicking the same PR, deselect it and show all PRs
       setSelectedPR(null);
       setHideUnselectedPRs(false);
+      setSourceUrl(''); // Clear source URL when deselecting
     } else {
       // Select the new PR and hide unselected ones
       setSelectedPR(pr);
       setHideUnselectedPRs(true);
+      setSourceUrl(pr.url || ''); // Set source URL from selected PR
     }
     setSelectedArticle(null);
     setHideUnselectedArticles(false);
@@ -404,10 +495,12 @@ export default function PRStoryGeneratorPage() {
       // If clicking the same article, deselect it and show all articles
       setSelectedArticle(null);
       setHideUnselectedArticles(false);
+      setSourceUrl(''); // Clear source URL when deselecting
     } else {
       // Select the new article and hide unselected ones
       setSelectedArticle(article);
       setHideUnselectedArticles(true);
+      setSourceUrl(article.url || ''); // Set source URL from selected article
     }
     setSelectedPR(null);
     setHideUnselectedPRs(false);
@@ -450,8 +543,8 @@ export default function PRStoryGeneratorPage() {
 
   // Add context from recent Benzinga article
   const addContext = async () => {
-    if (!ticker.trim() || !article.trim()) {
-      setContextError('Ticker and generated article are required');
+    if (!article.trim()) {
+      setContextError('Generated article is required');
       return;
     }
     
@@ -459,12 +552,20 @@ export default function PRStoryGeneratorPage() {
     setLoadingContext(true);
     
     try {
+      // Extract the lead paragraph hyperlink URL to exclude it from context
+      let excludeUrl = '';
+      const leadParagraphMatch = article.match(/<a href="([^"]+)">[^<]+<\/a>/);
+      if (leadParagraphMatch) {
+        excludeUrl = leadParagraphMatch[1];
+      }
+      
       const res = await fetch('/api/generate/add-context', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          ticker,
-          currentArticle: article 
+          currentArticle: article,
+          excludeUrl: excludeUrl,
+          previouslyUsedUrls: previouslyUsedContextUrls
         }),
       });
       
@@ -473,6 +574,10 @@ export default function PRStoryGeneratorPage() {
         setContextError(data.error);
       } else if (data.updatedArticle) {
         setArticle(data.updatedArticle);
+        // Add the new context URL to the previously used list
+        if (data.contextSource && data.contextSource.url) {
+          setPreviouslyUsedContextUrls(prev => [...prev, data.contextSource.url]);
+        }
       }
     } catch (error) {
       setContextError('Failed to add context.');
@@ -566,6 +671,7 @@ export default function PRStoryGeneratorPage() {
     setIncludeSubheads(false);
     setLoadingContext(false);
     setContextError('');
+    setPreviouslyUsedContextUrls([]);
   };
 
   const handleAnalystNoteTextExtracted = (text: string, noteTicker: string) => {
@@ -875,21 +981,22 @@ export default function PRStoryGeneratorPage() {
               Include Subheads
             </label>
           </div>
-          <button
-            onClick={generateArticle}
-            disabled={generating || !ticker.trim() || !primaryText.trim()}
-            style={{ 
-              padding: '8px 16px', 
-              background: '#2563eb', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: 4,
-              fontSize: 16,
-              cursor: generating ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {generating ? 'Generating Story...' : 'Generate Story'}
-          </button>
+                     <button
+             onClick={generateArticle}
+             disabled={generating}
+             style={{ 
+               padding: '8px 16px', 
+               background: generating ? '#6b7280' : '#2563eb', 
+               color: 'white', 
+               border: 'none', 
+               borderRadius: 4,
+               fontSize: 16,
+               cursor: generating ? 'not-allowed' : 'pointer'
+             }}
+             title={generating ? 'Generating story...' : 'Generate story'}
+           >
+             {generating ? 'Generating Story...' : 'Generate Story'}
+           </button>
         </div>
       </div>
       

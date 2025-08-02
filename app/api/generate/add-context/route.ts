@@ -1,78 +1,168 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { generateTopicUrl } from '../../../lib/api';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 
-async function fetchRecentArticle(ticker: string, excludeUrl?: string): Promise<any | null> {
+async function fetchContextArticle(currentArticle: string, excludeUrl?: string, previouslyUsedUrls: string[] = []): Promise<any | null> {
   try {
-    const dateFrom = new Date();
-    dateFrom.setDate(dateFrom.getDate() - 7);
-    const dateFromStr = dateFrom.toISOString().slice(0, 10);
-    
-    const url = `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&tickers=${encodeURIComponent(ticker)}&items=10&fields=headline,title,created,body,url,channels&accept=application/json&displayOutput=full&dateFrom=${dateFromStr}`;
-    
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
+    // Extract key topics from the current article to find relevant context
+    const topicPrompt = `
+Extract 3-5 key topics or themes from this financial article that would be relevant for finding related news articles. Focus on:
+- Company names, ticker symbols, or industry terms
+- Key events, announcements, or market movements
+- Regulatory or policy topics
+- Technology or product-related terms
+
+IMPORTANT: Prioritize the main company/ticker being discussed in the article. If the article is about a specific company (like Carvana, Apple, Tesla, etc.), that company name should be the primary topic.
+
+Article: ${currentArticle.substring(0, 1000)}
+
+Return only the topics as a comma-separated list, no explanations:`;
+
+    const topicCompletion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: topicPrompt }],
+      max_tokens: 100,
+      temperature: 0.3,
     });
+
+    const topics = topicCompletion.choices[0].message?.content?.trim() || '';
+    if (!topics) return null;
+
+    // Try each topic to find a relevant article
+    const topicList = topics.split(',').map(t => t.trim()).filter(t => t.length > 0);
     
-    if (!res.ok) {
-      console.error('Benzinga API error:', await res.text());
-      return null;
+    for (const topic of topicList) {
+      try {
+        // Use the same logic as generateTopicUrl but for context articles
+        const cleanTopic = topic.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        if (cleanTopic.length < 3) continue;
+
+        const url = `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&items=10&fields=headline,title,created,body,url,channels&accept=application/json&displayOutput=full`;
+        
+        const res = await fetch(url, {
+          headers: { Accept: 'application/json' },
+        });
+        
+        if (!res.ok) continue;
+        
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) continue;
+        
+        // Filter out press releases and the excluded URL
+        const prChannelNames = ['press releases', 'press-releases', 'pressrelease', 'pr'];
+        const normalize = (str: string) => str.toLowerCase().replace(/[-_]/g, ' ');
+        
+        const relevantArticles = data
+          .filter(item => {
+            // Exclude press releases
+            if (Array.isArray(item.channels) && item.channels.some((ch: any) => 
+              typeof ch.name === 'string' && prChannelNames.includes(normalize(ch.name))
+            )) {
+              return false;
+            }
+            
+            // Exclude the current article URL if provided
+            if (excludeUrl && item.url === excludeUrl) {
+              return false;
+            }
+            
+            // Exclude previously used URLs
+            if (previouslyUsedUrls.includes(item.url)) {
+              return false;
+            }
+            
+            // Check if the article content is relevant to the topic
+            const content = `${item.headline || ''} ${item.body || ''}`.toLowerCase();
+            const headline = (item.headline || item.title || '').toLowerCase();
+            
+            // More strict relevance checking - prefer exact topic matches or strong keyword matches
+            const topicWords = cleanTopic.split(' ');
+            
+            // Check for exact topic match first
+            if (content.includes(cleanTopic)) {
+              return true;
+            }
+            
+            // Check if at least 2 words from the topic appear in the headline or content
+            const matchingWords = topicWords.filter(word => 
+              word.length > 2 && (headline.includes(word) || content.includes(word))
+            );
+            
+            // Require at least 2 matching words for relevance
+            return matchingWords.length >= 2;
+          })
+          .map((item: any) => {
+            const content = `${item.headline || ''} ${item.body || ''}`.toLowerCase();
+            const headline = (item.headline || item.title || '').toLowerCase();
+            const topicWords = cleanTopic.split(' ');
+            
+            // Calculate relevance score
+            let score = 0;
+            
+            // Exact topic match gets highest score
+            if (content.includes(cleanTopic)) {
+              score += 100;
+            }
+            
+            // Headline matches get higher score than body matches
+            const headlineMatches = topicWords.filter(word => 
+              word.length > 2 && headline.includes(word)
+            ).length;
+            score += headlineMatches * 20;
+            
+            const bodyMatches = topicWords.filter(word => 
+              word.length > 2 && content.includes(word)
+            ).length;
+            score += bodyMatches * 5;
+            
+            return {
+              headline: item.headline || item.title || '[No Headline]',
+              body: item.body || '',
+              url: item.url,
+              created: item.created,
+              score: score
+            };
+          })
+          .filter(item => item.body && item.body.length > 100) // Ensure there's substantial content
+          .sort((a, b) => b.score - a.score); // Sort by relevance score
+        
+        if (relevantArticles.length > 0) {
+          return relevantArticles[0];
+        }
+      } catch (error) {
+        console.error(`Error fetching article for topic "${topic}":`, error);
+        continue;
+      }
     }
     
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) return null;
-    
-    // Filter out press releases and the current article URL
-    const prChannelNames = ['press releases', 'press-releases', 'pressrelease', 'pr'];
-    const normalize = (str: string) => str.toLowerCase().replace(/[-_]/g, ' ');
-    
-    const recentArticles = data
-      .filter(item => {
-        // Exclude press releases
-        if (Array.isArray(item.channels) && item.channels.some((ch: any) => 
-          typeof ch.name === 'string' && prChannelNames.includes(normalize(ch.name))
-        )) {
-          return false;
-        }
-        
-        // Exclude the current article URL if provided
-        if (excludeUrl && item.url === excludeUrl) {
-          return false;
-        }
-        
-        return true;
-      })
-      .map((item: any) => ({
-        headline: item.headline || item.title || '[No Headline]',
-        body: item.body || '',
-        url: item.url,
-        created: item.created,
-      }))
-      .filter(item => item.body && item.body.length > 100); // Ensure there's substantial content
-    
-    return recentArticles.length > 0 ? recentArticles[0] : null;
+    return null;
   } catch (error) {
-    console.error('Error fetching recent article:', error);
+    console.error('Error fetching context article:', error);
     return null;
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const { ticker, currentArticle } = await request.json();
+    const { currentArticle, excludeUrl, previouslyUsedUrls = [] } = await request.json();
     
-    if (!ticker || !currentArticle) {
-      return NextResponse.json({ error: 'Ticker and current article are required.' }, { status: 400 });
+    if (!currentArticle) {
+      return NextResponse.json({ error: 'Current article is required.' }, { status: 400 });
     }
 
-    // Fetch a recent article for context
-    const recentArticle = await fetchRecentArticle(ticker);
+    // Fetch a relevant context article based on the current article's topics
+    const contextArticle = await fetchContextArticle(currentArticle, excludeUrl, previouslyUsedUrls);
     
-    if (!recentArticle) {
-      return NextResponse.json({ error: 'No recent articles found for context.' }, { status: 404 });
+    if (!contextArticle) {
+      return NextResponse.json({ error: 'No relevant context articles found.' }, { status: 404 });
     }
 
     // Generate condensed context using OpenAI
@@ -82,15 +172,15 @@ You are a financial journalist. Given the current article and a recent news arti
 Current Article:
 ${currentArticle}
 
-Recent News Article:
-Headline: ${recentArticle.headline}
-Content: ${recentArticle.body}
+Context News Article:
+Headline: ${contextArticle.headline}
+Content: ${contextArticle.body}
 
 Requirements:
 1. Create exactly 2 paragraphs that provide additional context
 2. Make the content relevant to the current article's topic
 3. Keep each paragraph to EXACTLY 2 sentences maximum - no more, no less
-4. You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this exact format: <a href="${recentArticle.url}">[three word phrase]</a>
+4. You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this exact format: <a href="${contextArticle.url}">[three word phrase]</a>
 5. The SECOND paragraph should have NO hyperlinks
 6. Make the content flow naturally with the current article
 7. Focus on providing valuable context that enhances the reader's understanding
@@ -101,6 +191,10 @@ Requirements:
 12. CRITICAL: ONLY the first paragraph should contain exactly one hyperlink in the format specified above
 13. Do NOT reference "a recent article" or similar phrases - just embed the hyperlink naturally in the existing sentence structure
 14. Ensure proper spacing between paragraphs - add double line breaks between paragraphs
+15. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
+    * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "<strong>Bill Ackman</strong>" or "<strong>Warren Buffett</strong>")
+    * Second and subsequent references: Use only the last name without bolding (e.g., "Ackman" or "Buffett")
+    * This applies to all people mentioned in the context paragraphs
 
 Write the 2 context paragraphs now:`;
 
@@ -189,18 +283,43 @@ Create 1 subhead for the context section:`;
       const beforePriceAction = lines.slice(0, priceActionIndex).join('\n');
       const priceActionAndAfter = lines.slice(priceActionIndex).join('\n');
       const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
-      updatedArticleWithSubheads = `${beforePriceAction}\n\n${subheadSection}\n\n${priceActionAndAfter}`;
+      
+      // Check if there's a "Read Next" section before price action that needs to be moved
+      const readNextPattern = /<p>Read Next:.*?<\/p>/s;
+      const readNextMatch = beforePriceAction.match(readNextPattern);
+      
+      if (readNextMatch) {
+        // Remove the "Read Next" section from before price action
+        const beforePriceActionWithoutReadNext = beforePriceAction.replace(readNextPattern, '').trim();
+        // Insert context first, then "Read Next" after context
+        updatedArticleWithSubheads = `${beforePriceActionWithoutReadNext}\n\n${subheadSection}\n\n${readNextMatch[0]}\n\n${priceActionAndAfter}`;
+      } else {
+        // No "Read Next" section to move, just insert context
+        updatedArticleWithSubheads = `${beforePriceAction}\n\n${subheadSection}\n\n${priceActionAndAfter}`;
+      }
     } else {
-      // If no price action found, add to the end
-      const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
-      updatedArticleWithSubheads = `${currentArticle}\n\n${subheadSection}`;
+      // If no price action found, check if there's a "Read Next" section at the end to move
+      const readNextPattern = /<p>Read Next:.*?<\/p>/s;
+      const readNextMatch = currentArticle.match(readNextPattern);
+      
+      if (readNextMatch) {
+        // Remove the "Read Next" section from the end
+        const articleWithoutReadNext = currentArticle.replace(readNextPattern, '').trim();
+        const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
+        // Insert context first, then "Read Next" after context
+        updatedArticleWithSubheads = `${articleWithoutReadNext}\n\n${subheadSection}\n\n${readNextMatch[0]}`;
+      } else {
+        // No "Read Next" section to move, just add context to the end
+        const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
+        updatedArticleWithSubheads = `${currentArticle}\n\n${subheadSection}`;
+      }
     }
     
     return NextResponse.json({ 
       updatedArticle: updatedArticleWithSubheads,
       contextSource: {
-        headline: recentArticle.headline,
-        url: recentArticle.url
+        headline: contextArticle.headline,
+        url: contextArticle.url
       }
     });
   } catch (error: any) {

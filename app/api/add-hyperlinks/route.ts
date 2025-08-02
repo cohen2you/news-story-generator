@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { generateTopicUrl, shouldLinkToTopic } from '../../../lib/api';
 
 // Optional mapping for nicer outlet names
 const outletNameMap: Record<string, string> = {
@@ -48,7 +49,7 @@ function insertLinkOnReported(text: string, outletName: string, url: string) {
 }
 
 // Insert hyperlink for any 3 consecutive words in second half of text (not overlapping existing links)
-function insertSecondaryLink(text: string, url: string) {
+async function insertSecondaryLink(text: string, url: string, sourceUrl?: string) {
   if (!url) return text;
 
   // Avoid double linking
@@ -64,12 +65,23 @@ function insertSecondaryLink(text: string, url: string) {
     // Skip if phrase contains markdown link or special chars that might break markdown
     if (phrase.match(/\[|\]|\(|\)/)) continue;
 
+    // Check if this phrase should link to a topic page instead of the secondary URL
+    let linkUrl = url;
+    if (shouldLinkToTopic(phrase, sourceUrl)) {
+      try {
+        linkUrl = await generateTopicUrl(phrase);
+      } catch (error) {
+        console.error('Error generating topic URL:', error);
+        linkUrl = url; // Fallback to original URL
+      }
+    }
+
     // Regex to find the phrase as whole words, case insensitive
     const phraseRegex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
 
     if (phraseRegex.test(text)) {
       // Replace only first occurrence with markdown link
-      return text.replace(phraseRegex, `[${phrase}](${url})`);
+      return text.replace(phraseRegex, `[${phrase}](${linkUrl})`);
     }
   }
   // If no suitable phrase found, return original text
@@ -97,7 +109,7 @@ export async function POST(req: Request) {
 
     // Add hyperlink to any 3-word phrase in the second half linking to secondary URL
     if (secondaryUrl) {
-      linkedText = insertSecondaryLink(linkedText, secondaryUrl);
+      linkedText = await insertSecondaryLink(linkedText, secondaryUrl, primaryUrl);
     }
 
     return NextResponse.json({ result: linkedText });

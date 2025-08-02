@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { generateTopicUrl, shouldLinkToTopic } from '../../../../lib/api';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
@@ -6,13 +7,59 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 const MODEL = 'gpt-4o';
 
+// Helper function to extract outlet name from URL
+function getOutletNameFromUrl(url: string): string {
+  if (!url) return 'The company';
+  
+  try {
+    const hostname = new URL(url).hostname;
+    const domain = hostname.replace(/^www\./, '');
+    const parts = domain.split('.');
+    
+    if (parts.length >= 2) {
+      const name = parts[0].toLowerCase();
+      // Map common outlet names
+      const outletMap: Record<string, string> = {
+        'cnbc': 'CNBC',
+        'reuters': 'Reuters',
+        'bloomberg': 'Bloomberg',
+        'benzinga': 'Benzinga',
+        'yahoo': 'Yahoo Finance',
+        'marketwatch': 'MarketWatch',
+        'wsj': 'The Wall Street Journal',
+        'nytimes': 'The New York Times',
+        'forbes': 'Forbes',
+        'fortune': 'Fortune',
+        'businessinsider': 'Business Insider',
+        'techcrunch': 'TechCrunch',
+        'seekingalpha': 'Seeking Alpha',
+        'investing': 'Investing.com',
+        'finance': 'Yahoo Finance'
+      };
+      
+      return outletMap[name] || name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return 'The company';
+  } catch {
+    return 'The company';
+  }
+}
+
 async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promise<any[]> {
   try {
     const dateFrom = new Date();
     dateFrom.setDate(dateFrom.getDate() - 7);
     const dateFromStr = dateFrom.toISOString().slice(0, 10);
     
-    const url = `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&tickers=${encodeURIComponent(ticker)}&items=20&fields=headline,title,created,url,channels&accept=application/json&displayOutput=full&dateFrom=${dateFromStr}`;
+    let url: string;
+    
+    if (ticker && ticker.trim() !== '') {
+      // Fetch ticker-specific articles
+      url = `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&tickers=${encodeURIComponent(ticker)}&items=20&fields=headline,title,created,url,channels&accept=application/json&displayOutput=full&dateFrom=${dateFromStr}`;
+    } else {
+      // Fetch general market news when no ticker is provided
+      url = `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&items=20&fields=headline,title,created,url,channels&accept=application/json&displayOutput=full&dateFrom=${dateFromStr}`;
+    }
     
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
@@ -24,28 +71,33 @@ async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promis
     }
     
     const data = await res.json();
+    console.log('Benzinga API response type:', typeof data, Array.isArray(data) ? 'array' : 'not array');
+    console.log('Benzinga API response length:', Array.isArray(data) ? data.length : 'N/A');
     if (!Array.isArray(data)) return [];
     
     // Filter out press releases and the current article URL
     const prChannelNames = ['press releases', 'press-releases', 'pressrelease', 'pr'];
     const normalize = (str: string) => str.toLowerCase().replace(/[-_]/g, ' ');
     
-    const relatedArticles = data
-      .filter(item => {
-        // Exclude press releases
-        if (Array.isArray(item.channels) && item.channels.some((ch: any) => 
-          typeof ch.name === 'string' && prChannelNames.includes(normalize(ch.name))
-        )) {
-          return false;
-        }
-        
-        // Exclude the current article URL if provided
-        if (excludeUrl && item.url === excludeUrl) {
-          return false;
-        }
-        
-        return true;
-      })
+    const filteredArticles = data.filter(item => {
+      // Exclude press releases
+      if (Array.isArray(item.channels) && item.channels.some((ch: any) => 
+        typeof ch.name === 'string' && prChannelNames.includes(normalize(ch.name))
+      )) {
+        return false;
+      }
+      
+      // Exclude the current article URL if provided
+      if (excludeUrl && item.url === excludeUrl) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    console.log('Articles after filtering:', filteredArticles.length);
+    
+    const relatedArticles = filteredArticles
       .map((item: any) => ({
         headline: item.headline || item.title || '[No Headline]',
         url: item.url,
@@ -53,6 +105,7 @@ async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promis
       }))
       .slice(0, 5);
     
+    console.log('Final related articles:', relatedArticles.length);
     return relatedArticles;
   } catch (error) {
     console.error('Error fetching related articles:', error);
@@ -61,6 +114,10 @@ async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promis
 }
 
 function buildPrompt({ ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts }: { ticker: string; sourceText: string; analystSummary: string; priceSummary: string; priceActionDay?: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[] }) {
+  
+  console.log('buildPrompt called with sourceUrl:', sourceUrl);
+  console.log('sourceUrl type:', typeof sourceUrl);
+  console.log('sourceUrl length:', sourceUrl?.length);
   
   // Check if this is an analyst note - make detection more specific
   const isAnalystNote = (sourceText.includes('Samik Chatterjee') && sourceText.includes('J P M O R G A N')) || 
@@ -117,7 +174,7 @@ YOU MUST USE THIS INFORMATION IN YOUR ARTICLE.
   
   return `You are a professional financial news writer for Benzinga.
 
-Write a concise, fact-based news article (about 350 words) about the stock with ticker: ${ticker}. Use the provided press release, news article, or analyst note text as your main source, but focus only on information relevant to ${ticker}. Ignore other tickers or companies mentioned in the source text.
+Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release, news article, or analyst note text as your main source${ticker && ticker.trim() !== '' ? `, but focus only on information relevant to ${ticker}` : ''}. Ignore other tickers or companies mentioned in the source text.
 
 IMPORTANT: If the source text appears to be an analyst note (contains analyst names, firm names, ratings, price targets, or financial analysis), prioritize extracting and using the specific analyst insights, forecasts, and reasoning from the note rather than generic analyst summary data. 
 
@@ -137,18 +194,34 @@ CRITICAL FORMATTING RULES:
 
 Structure your article as follows:
 - Headline: Write a clear, engaging headline in the style of these examples (do not use bold, asterisks, or markdown headings such as # or ##; the headline should be plain text only):
-  - C3 AI Stock Is Tumbling Thursday: What's Going On?
-  - What's Going On With Oklo Stock?
+  - Federal Reserve Governor Adriana Kugler Resigns: What This Means
+  - Fed Governor Kugler Steps Down: Impact on Interest Rate Policy
 
-- Lead paragraph: Start with a sentence describing the ACTUAL price movement of the stock based on the price data provided. Use the exact movement from the price summary (e.g., if price summary shows "down 1.61%", say "traded lower" or "declined"; if it shows "up 2.5%", say "rose" or "traded higher"). Use the full company name and ticker in this format: <strong>Company Name</strong> (NYSE: TICKER). The company name should be bolded using HTML <strong> tags. Do not use markdown bold (**) or asterisks elsewhere. Do not include the specific price or percentage in the lead; reserve that for the price action line at the bottom. Then state what happened and why it matters for ${ticker}. CRITICAL: Do NOT include analyst names (like "Samik Chatterjee" or "J.P. Morgan analyst") in the lead paragraph. The lead should focus on the stock movement and the general news event, not specific analyst details. 
+- Lead paragraph: Start with the most important news event or development from the source text. Focus on what happened, not on stock price movement. Use the full company name and ticker in this format: <strong>Company Name</strong> (NYSE: TICKER) if a specific company is involved, or focus on the news event itself if it's broader market news. The company name should be bolded using HTML <strong> tags. Do not use markdown bold (**) or asterisks elsewhere. State what happened and why it matters. CRITICAL: Do NOT include analyst names (like "Samik Chatterjee" or "J.P. Morgan analyst") in the lead paragraph. The lead should focus on the news event itself, not specific analyst details or stock price movements. 
 
-MANDATORY HYPERLINK RULE: If sourceUrl is provided and not empty, you MUST include exactly one hyperlink in the lead paragraph. Wrap exactly three consecutive words in <a href="${sourceUrl}"> and </a> tags. Choose any three consecutive words that fit naturally. If sourceUrl is empty, do not include any hyperlinks. EXAMPLE: "Apple Inc (NASDAQ: AAPL) traded lower on Tuesday following <a href="${sourceUrl}">reports that JPMorgan</a> Chase & Co. is in advanced discussions"
+MANDATORY HYPERLINK RULE: If sourceUrl is provided and not empty, you MUST include exactly one hyperlink in the lead paragraph. Wrap exactly three consecutive words in <a href="${sourceUrl}"> and </a> tags. Choose any three consecutive words that fit naturally. If sourceUrl is empty, do not include any hyperlinks. 
+
+IMPORTANT: When choosing which three words to hyperlink, prefer phrases that represent topics or concepts (like "Berkshire's warning", "tariff impacts", "earnings decline") rather than just company names or basic facts. This allows for better topic-based linking to relevant Benzinga content.
+
+EXAMPLE: "Federal Reserve Governor Adriana Kugler <a href="${sourceUrl}">announced her resignation</a> on Saturday, creating a vacancy on the Federal Reserve Board."
+
+DEBUG INFO: sourceUrl = "${sourceUrl}"
 
 CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have more information, create additional paragraphs.
 
-- IMPORTANT: In your lead, use this exact phrase to reference the timing of the price movement: "${priceActionDay || '[Day not provided]'}". Do not use or infer any other day or date, even if the source text or PR/article date mentions a different day.
+- IMPORTANT: In your lead, if the source text or PR/article date mentions a specific day, use that date. If no specific date is mentioned, use today's date or "recently" as appropriate. Do not force price movement timing if the news is not about stock price changes.
 
-- Additional paragraphs: Provide factual details, context, and any relevant quotes about ${ticker}. When referencing the source material, mention the actual date: "${sourceDateFormatted || '[Date not provided]'}" (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. CRITICAL: Each paragraph must be no longer than 2 sentences. If you have more information, create additional paragraphs.
+- NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
+  * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "President <strong>Donald Trump</strong>" or "CEO <strong>Tim Cook</strong>")
+  * Second and subsequent references: Use only the last name without bolding (e.g., "Trump" or "Cook")
+  * This applies to all people mentioned in the article, including politicians, executives, analysts, etc.
+  * Exception: Analyst names in analyst notes should follow the specific analyst note formatting rules below
+
+- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. When referencing the source material, if a specific date is available, mention it (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If no specific date is available, use "recently" or "today" as appropriate. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
+
+CRITICAL SOURCE ATTRIBUTION RULE: You MUST include a source attribution in the second paragraph (immediately after the lead paragraph). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name:', outletName, 'for URL:', sourceUrl); return `The second paragraph MUST begin with: "${outletName} <a href="${sourceUrl}">reports</a>."`; })() : 'The second paragraph MUST begin with: "The company reports."'}
+
+CRITICAL: Each paragraph must be no longer than 2 sentences. If you have more information, create additional paragraphs.
 
 ${includeCTA && ctaText ? `
 - CTA Integration: After the lead paragraph, insert the following CTA exactly as provided:
@@ -182,10 +255,10 @@ ${isAnalystNote ? '- MANDATORY FOR ANALYST NOTES: Do NOT include analyst names i
   * Any notable risks or catalysts discussed
   Each paragraph must be no longer than 2 sentences. Focus on extracting specific details from the source text rather than using generic analyst summary data.
 
-- At the very bottom, include the following price action summary for ${ticker} exactly as provided, but with these modifications:
+${ticker && ticker.trim() !== '' ? `- At the very bottom, include the following price action summary for ${ticker} exactly as provided, but with these modifications:
   - Bold the ticker and "Price Action:" part using HTML <strong> tags (e.g., <strong>AA Price Action:</strong>)
   - Hyperlink "according to Benzinga Pro." to https://pro.benzinga.com/ using <a href="https://pro.benzinga.com/">according to Benzinga Pro.</a>
-${priceSummary}
+${priceSummary}` : ''}
 
 ${relatedArticles && relatedArticles.length > 0 ? `
 - After the price action, add a "Read Next:" section with the following format:
@@ -223,7 +296,7 @@ export async function POST(req: Request) {
   try {
     const { ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts } = await req.json();
     if (!sourceText) return NextResponse.json({ error: 'Source text is required.' }, { status: 400 });
-    if (!ticker) return NextResponse.json({ error: 'Ticker is required.' }, { status: 400 });
+    // Ticker is optional - no validation required
     console.log('Prompt priceSummary:', priceSummary); // Log the priceSummary
     console.log('Source text length:', sourceText.length);
     console.log('Source text preview:', sourceText.substring(0, 200));
@@ -232,8 +305,14 @@ export async function POST(req: Request) {
     
     // Fetch related articles
     const relatedArticles = await fetchRelatedArticles(ticker, sourceUrl);
+    console.log('Related articles fetched:', relatedArticles.length, 'articles');
+    console.log('Ticker provided:', ticker);
     
+    console.log('Building prompt with sourceUrl:', sourceUrl);
     const prompt = buildPrompt({ ticker, sourceText, analystSummary: analystSummary || '', priceSummary: priceSummary || '', priceActionDay, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts });
+    console.log('Related articles in prompt:', relatedArticles.length);
+    console.log('First related article:', relatedArticles[0]?.headline);
+    console.log('Prompt preview (first 500 chars):', prompt.substring(0, 500));
     const res = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -252,7 +331,117 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `OpenAI error: ${raw}` }, { status: 500 });
     }
     const data = await res.json();
-    const story = data.choices[0].message.content.trim();
+    let story = data.choices[0].message.content.trim();
+    
+    console.log('Generated story preview:', story.substring(0, 500));
+    console.log('Source URL provided:', sourceUrl);
+    
+    // Post-process the story to replace topic-based hyperlinks with appropriate Benzinga URLs
+    if (sourceUrl) {
+      console.log('Processing lead paragraph hyperlink...');
+      // Find the lead paragraph hyperlink and check if it should be topic-based
+      const leadParagraphMatch = story.match(/<p>([^<]*<a href="[^"]*">([^<]+)<\/a>[^<]*)<\/p>/);
+      if (leadParagraphMatch) {
+        const linkedPhrase = leadParagraphMatch[2];
+        console.log('Found linked phrase in lead:', linkedPhrase);
+        if (shouldLinkToTopic(linkedPhrase, sourceUrl)) {
+          try {
+            const topicUrl = await generateTopicUrl(linkedPhrase);
+            console.log('Generated topic URL:', topicUrl);
+            // Replace the source URL with the topic URL in the lead paragraph
+            story = story.replace(
+              new RegExp(`<a href="${sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}">${linkedPhrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<\/a>`),
+              `<a href="${topicUrl}">${linkedPhrase}</a>`
+            );
+          } catch (error) {
+            console.error('Error generating topic URL for lead paragraph:', error);
+          }
+        }
+      } else {
+        console.log('No lead paragraph hyperlink found');
+      }
+    }
+    
+    // Fix any blank URLs in source attribution
+    console.log('Processing source attribution...');
+    if (!sourceUrl) {
+      console.log('No source URL - removing hyperlinks from reports');
+      // Remove hyperlinks from "reports" when there's no source URL
+      story = story.replace(/<a href="[^"]*">reports<\/a>/g, 'reports');
+    } else {
+      console.log('Fixing blank URLs in reports attribution');
+      // Fix any blank URLs (href="#" or href="") in reports attribution
+      const beforeFix = story.includes('reports');
+      story = story.replace(/<a href="[#"]*">reports<\/a>/g, `<a href="${sourceUrl}">reports</a>`);
+      const afterFix = story.includes(`href="${sourceUrl}">reports</a>`);
+      console.log('Reports attribution fixed:', beforeFix, '->', afterFix);
+      
+      // Also check if "reports" exists but isn't hyperlinked and add hyperlink
+      if (story.includes('reports') && !story.includes(`href="${sourceUrl}">reports</a>`)) {
+        console.log('Adding missing hyperlink to reports');
+        story = story.replace(/(\w+)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
+      }
+      
+      // CRITICAL: If no source attribution exists at all, add it after the lead paragraph
+      if (!story.includes('reports')) {
+        console.log('No source attribution found - adding it after lead paragraph');
+        const outletName = getOutletNameFromUrl(sourceUrl);
+        const sourceAttribution = `<p>${outletName} <a href="${sourceUrl}">reports</a>.</p>`;
+        
+        // Split into paragraphs and insert after the first paragraph (lead)
+        const paragraphs = story.split('</p>');
+        if (paragraphs.length >= 2) {
+          // Insert after the lead paragraph (index 1)
+          paragraphs.splice(1, 0, sourceAttribution);
+          story = paragraphs.join('</p>');
+          console.log('Added source attribution after lead paragraph');
+        }
+      }
+    }
+    
+    // Ensure "Also Read" and "Read Next" sections are included if related articles are available
+    console.log('Processing related articles sections...');
+    if (relatedArticles && relatedArticles.length > 0) {
+      console.log('Related articles available:', relatedArticles.length);
+      
+      // Check if "Also Read" section exists, if not add it after the second paragraph
+      if (!story.includes('Also Read:')) {
+        console.log('Adding "Also Read" section');
+        const paragraphs = story.split('</p>');
+        if (paragraphs.length >= 3) {
+          // Insert "Also Read" after the second paragraph (index 2)
+          const alsoReadSection = `<p>Also Read: <a href="${relatedArticles[0].url}">${relatedArticles[0].headline}</a></p>`;
+          paragraphs.splice(2, 0, alsoReadSection);
+          story = paragraphs.join('</p>');
+        }
+      } else {
+        console.log('"Also Read" section already exists');
+      }
+      
+      // Check if "Read Next" section exists, if not add it after context but before price action
+      if (!story.includes('Read Next:')) {
+        console.log('Adding "Read Next" section');
+        const readNextSection = `<p>Read Next: <a href="${relatedArticles[1]?.url || relatedArticles[0].url}">${relatedArticles[1]?.headline || relatedArticles[0].headline}</a></p>`;
+        
+        // Find the price action section to insert before it
+        const priceActionIndex = story.indexOf('Price Action:');
+        if (priceActionIndex !== -1) {
+          // Insert before price action
+          const beforePriceAction = story.substring(0, priceActionIndex);
+          const priceActionAndAfter = story.substring(priceActionIndex);
+          story = `${beforePriceAction}\n\n${readNextSection}\n\n${priceActionAndAfter}`;
+        } else {
+          // If no price action found, add to the end
+          story += readNextSection;
+        }
+      } else {
+        console.log('"Read Next" section already exists');
+      }
+    } else {
+      console.log('No related articles available');
+    }
+    
+    console.log('Final story preview:', story.substring(0, 500));
     return NextResponse.json({ story });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to generate story.' }, { status: 500 });

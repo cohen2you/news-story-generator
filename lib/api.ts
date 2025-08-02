@@ -83,3 +83,69 @@ export async function generateSecondarySection({
   });
   return await callOpenAI(prompt);
 }
+
+// Utility function to generate topic-based Benzinga URLs
+export async function generateTopicUrl(topic: string): Promise<string> {
+  try {
+    // Clean and normalize the topic
+    const cleanTopic = topic.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    
+    // Extract key terms from the topic
+    const terms = cleanTopic.split(/\s+/).filter(term => term.length > 2);
+    
+    if (terms.length === 0) {
+      return 'https://www.benzinga.com/news';
+    }
+    
+    // Try to find relevant articles using the Benzinga News API
+    const searchTerm = terms.slice(0, 3).join(' '); // Use up to 3 terms
+    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=5&fields=headline,title,url,channels&accept=application/json&displayOutput=full`;
+    
+    const res = await fetch(url);
+    if (!res.ok) {
+      return 'https://www.benzinga.com/news';
+    }
+    
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      return 'https://www.benzinga.com/news';
+    }
+    
+    // Look for articles that contain our search terms
+    const relevantArticles = data.filter((article: any) => {
+      const headline = (article.headline || article.title || '').toLowerCase();
+      return terms.some(term => headline.includes(term));
+    });
+    
+    if (relevantArticles.length > 0) {
+      // Return the URL of the most relevant article
+      return relevantArticles[0].url || 'https://www.benzinga.com/news';
+    }
+    
+    // Fallback: construct a topic-based URL
+    const topicSlug = terms.join('-');
+    return `https://www.benzinga.com/news/${topicSlug}`;
+    
+  } catch (error) {
+    console.error('Error generating topic URL:', error);
+    return 'https://www.benzinga.com/news';
+  }
+}
+
+// Function to determine if a phrase should link to a topic page vs source URL
+export function shouldLinkToTopic(phrase: string, sourceUrl?: string): boolean {
+  if (!sourceUrl) return true;
+  
+  // Phrases that typically indicate topics rather than specific news events
+  const topicIndicators = [
+    'warning', 'concern', 'impact', 'effect', 'influence', 'pressure',
+    'trend', 'movement', 'shift', 'change', 'development', 'situation',
+    'environment', 'climate', 'condition', 'state', 'position',
+    'strategy', 'approach', 'plan', 'initiative', 'effort',
+    'challenge', 'obstacle', 'hurdle', 'difficulty', 'issue',
+    'opportunity', 'potential', 'prospect', 'outlook', 'forecast'
+  ];
+  
+  const phraseLower = phrase.toLowerCase();
+  return topicIndicators.some(indicator => phraseLower.includes(indicator));
+}

@@ -31,20 +31,23 @@ async function scrapeUrl(url: string): Promise<string> {
 // Generate CTA line
 async function generateCTA(sourceText: string, ticker?: string): Promise<string> {
   try {
-    const prompt = `Generate a compelling Call-to-Action (CTA) line for a financial news article based on this source text. The CTA should encourage readers to check the stock price or learn more.
+    const prompt = `Generate a compelling Call-to-Action (CTA) line for a financial news article based on this source text. The CTA should encourage readers to check market movements.
 
 Source Text: "${sourceText.substring(0, 500)}..."
 
-${ticker ? `Ticker: ${ticker}` : ''}
+${ticker ? `Ticker: ${ticker}` : 'Use SPY as default ticker for market movements'}
 
 Generate a single, engaging CTA line that:
-- Is action-oriented
-- Mentions checking price action or stock movement
+- Is action-oriented and generic
+- Mentions checking market movements or Wall Street activity
 - Is relevant to the news content
 - Uses professional but engaging language
 - Is 1-2 sentences maximum
 
-Example format: "[TICKER] is [movement]. Check the price action here."
+Example formats: 
+- "Check out the latest moves on Wall Street..."
+- "SPY is [movement]. Track it now here."
+- "See how markets are reacting to this news..."
 
 Return only the CTA text, no additional formatting.`;
 
@@ -111,7 +114,7 @@ Return only the 3 subheadings, one per line, no numbering or additional formatti
 
     const data = await response.json();
     const subheadsText = data.choices[0].message.content.trim();
-    return subheadsText.split('\n').filter(line => line.trim()).slice(0, 3);
+    return subheadsText.split('\n').filter((line: string) => line.trim()).slice(0, 3);
   } catch (error) {
     console.error('Error generating subheads:', error);
     return [];
@@ -251,11 +254,11 @@ Focus on the actual news content, not generic market data. Only include specific
 }
 
 // Fetch relevant market data based on content analysis
-async function fetchRelevantMarketData(suggestedSymbols: string[], newsType: string): Promise<any> {
+async function fetchRelevantMarketData(suggestedSymbols: string[], newsType: string, userTicker?: string): Promise<any> {
   try {
     // Always include major indices for context, plus any suggested symbols
     const baseSymbols = ['SPY', 'VIX', 'QQQ'];
-    const symbols = [...new Set([...baseSymbols, ...suggestedSymbols])];
+    const symbols = [...new Set([...baseSymbols, ...suggestedSymbols, ...(userTicker ? [userTicker] : [])])];
     const url = `${BZ_PRICE_URL}?token=${BENZINGA_API_KEY}&symbols=${symbols.join(',')}`;
     const res = await fetch(url);
     
@@ -307,7 +310,7 @@ function buildComprehensivePrompt(
                           marketStatus === 'premarket' ? 'premarket trading' :
                           marketStatus === 'afterhours' ? 'after-hours trading' : 'market session';
   
-  const tickerContext = userTicker ? `\nUSER REQUESTED TICKER: ${userTicker} - Include this ticker as a central focus if relevant to the story.` : '';
+  const tickerContext = userTicker ? `\nUSER REQUESTED TICKER: ${userTicker} - Include this ticker as a central focus if relevant to the story.` : '\nNO SPECIFIC TICKER: Focus on the news story and use SPY for any market references.';
   
   const hyperlinkRule = sourceUrl ? `\nMANDATORY HYPERLINK RULE: You MUST include exactly one hyperlink in the lead paragraph. Wrap exactly three consecutive words in <a href="${sourceUrl}"> and </a> tags. Choose any three consecutive words that fit naturally.` : '';
   
@@ -325,6 +328,8 @@ TASK: Transform the source article into a financial news piece that:
 3. Includes direct quotes when appropriate
 4. Adds intelligent market context based on the story's implications
 5. Provides relevant financial analysis and broader market impact
+
+CRITICAL: The article MUST start with the news story, NOT with ticker movements or market data. Do NOT begin with phrases like "[TICKER] traded lower" or "[TICKER] is slipping." Start with the actual news event.
 
 STRUCTURE:
 - Headline: Create an engaging, news-focused headline
@@ -350,6 +355,8 @@ MARKET CONTEXT:
 
 WRITING GUIDELINES:
 - START WITH THE NEWS STORY, not market data
+- NEVER begin with ticker movements like "[TICKER] traded lower" or "[TICKER] is slipping"
+- Start with the actual news event from the source material
 - Use direct quotes from the source when appropriate (use quotation marks)
 - Rewrite information in your own words to avoid plagiarism
 - Include market context only after establishing the news event
@@ -368,11 +375,17 @@ FORMAT:
 - Use Benzinga-style formatting
 
 EXAMPLE STRUCTURE:
-1. News event with direct quotes
+1. News event with direct quotes (e.g., "Federal Reserve Governor Adriana Kugler resigned on Friday...")
 2. Broader implications and analysis
 3. Market context and volatility
 4. Related market developments
 5. Market impact summary
+
+CORRECT EXAMPLE LEAD:
+"Federal Reserve Governor Adriana Kugler resigned on Friday, creating a vacancy on the Federal Reserve's Board of Governors at a pivotal time for monetary policy."
+
+INCORRECT EXAMPLE LEAD:
+"SPDR S&P 500 ETF (NYSE: SPY) traded lower on Friday following the resignation of Federal Reserve Governor Adriana Kugler."
 
 Generate a comprehensive article that prioritizes the news story while adding intelligent financial context.`;
 }
@@ -417,7 +430,9 @@ export async function POST(req: Request) {
     let subheadTexts: string[] = [];
     
     if (includeCTA) {
-      ctaText = await generateCTA(finalSourceText, ticker);
+      // Use SPY as default if no ticker is provided
+      const ctaTicker = ticker || 'SPY';
+      ctaText = await generateCTA(finalSourceText, ctaTicker);
     }
     
     if (includeSubheads) {
@@ -429,7 +444,7 @@ export async function POST(req: Request) {
     let relatedArticles = [];
     
     if (includeMarketData) {
-      marketData = await fetchRelevantMarketData(analysis.suggestedSymbols, analysis.newsType);
+      marketData = await fetchRelevantMarketData(analysis.suggestedSymbols, analysis.newsType, ticker);
       relatedArticles = await fetchRelatedArticles(analysis.relevantSectors, analysis.newsType, finalSourceUrl);
     }
     

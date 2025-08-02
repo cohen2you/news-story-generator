@@ -191,7 +191,7 @@ While Trump announced on July 14 that he would sign off on "severe tariffs" agai
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Ticker Symbol (Optional)
+              Ticker Symbol (Optional - SPY will be used for market references if not provided)
             </label>
             <input
               type="text"

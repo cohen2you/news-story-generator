@@ -67,7 +67,8 @@ export async function POST(request: Request) {
     const { ticker } = (await request.json()) as { ticker?: string };
     const symbol = (ticker ?? '').trim().toUpperCase();
     if (!symbol) {
-      return NextResponse.json({ ratings: [], error: 'Ticker parameter is required.' }, { status: 400 });
+      // Return empty ratings if no ticker provided
+      return NextResponse.json({ ratings: [] });
     }
 
     const ratings = await fetchAnalystRatings(symbol);

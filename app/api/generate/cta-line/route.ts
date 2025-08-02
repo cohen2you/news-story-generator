@@ -147,7 +147,8 @@ export async function POST(request: Request) {
   try {
     const { ticker } = await request.json();
     if (!ticker || typeof ticker !== 'string') {
-      return NextResponse.json({ error: 'Ticker is required.' }, { status: 400 });
+      // Ticker is optional - return empty CTA if no ticker provided
+      return NextResponse.json({ cta: '' });
     }
     // Fetch price action data from Benzinga
     const url = `https://api.benzinga.com/api/v2/quoteDelayed?token=${process.env.BENZINGA_API_KEY}&symbols=${ticker}`;
