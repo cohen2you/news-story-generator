@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       }
       
       // Check if multiple terms appear in the headline or content
-      const matchingTerms = terms.filter(term => 
+      const matchingTerms = terms.filter((term: string) => 
         headline.includes(term) || content.includes(term)
       );
       
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
       // If we have at least 1 matching term and it's a significant term, it might be relevant
       if (matchingTerms.length >= 1) {
         const significantTerms = ['cramer', 'jim', 'cnbc', 'analyst', 'investor', 'stock', 'market', 'earnings', 'carvana', 'cvna'];
-        return matchingTerms.some(term => significantTerms.includes(term));
+        return matchingTerms.some((term: string) => significantTerms.includes(term));
       }
       
       return false;
@@ -94,21 +94,21 @@ export async function POST(req: Request) {
       }
       
       // Headline matches get higher score than content matches
-      terms.forEach(term => {
+      terms.forEach((term: string) => {
         if (headline.includes(term)) score += 50;
         if (content.includes(term)) score += 20;
       });
       
       // Bonus for financial/stock market content
       const financialTerms = ['stock', 'market', 'investor', 'analyst', 'earnings', 'trading'];
-      financialTerms.forEach(term => {
+      financialTerms.forEach((term: string) => {
         if (headline.includes(term)) score += 30;
         if (content.includes(term)) score += 15;
       });
       
       // Penalize articles that seem unrelated
       const unrelatedTerms = ['perplexity', 'aravind', 'srinivas', 'ceo', 'trump', 'biden', 'politics', 'election'];
-      unrelatedTerms.forEach(term => {
+      unrelatedTerms.forEach((term: string) => {
         if (headline.includes(term) || content.includes(term)) {
           score -= 100;
         }
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
         ...article, 
         score,
         headline: article.headline || article.title,
-        matchingTerms: terms.filter(term => 
+        matchingTerms: terms.filter((term: string) => 
           (article.headline || article.title || '').toLowerCase().includes(term) ||
           (article.body || '').toLowerCase().includes(term)
         )
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
     
     // Test company fallback
     const companyTerms = ['carvana', 'cvna', 'tesla', 'tsla', 'apple', 'aapl', 'amazon', 'amzn', 'microsoft', 'msft'];
-    const foundCompany = companyTerms.find(term => cleanTopic.includes(term));
+    const foundCompany = companyTerms.find((term: string) => cleanTopic.includes(term));
     
     let companyArticles = [];
     if (foundCompany) {
