@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     
     // Clean and normalize the topic
     const cleanTopic = phrase.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-    const terms = cleanTopic.split(/\s+/).filter(term => term.length > 2);
+    const terms = cleanTopic.split(/\s+/).filter((term: string) => term.length > 2);
     
     console.log('Clean topic:', cleanTopic);
     console.log('Terms:', terms);
