@@ -285,7 +285,7 @@ Create 1 subhead for the context section:`;
       const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
       
       // Check if there's a "Read Next" section before price action that needs to be moved
-      const readNextPattern = /<p>Read Next:.*?<\/p>/s;
+      const readNextPattern = /<p>Read Next:[\s\S]*?<\/p>/;
       const readNextMatch = beforePriceAction.match(readNextPattern);
       
       if (readNextMatch) {
@@ -299,7 +299,7 @@ Create 1 subhead for the context section:`;
       }
     } else {
       // If no price action found, check if there's a "Read Next" section at the end to move
-      const readNextPattern = /<p>Read Next:.*?<\/p>/s;
+      const readNextPattern = /<p>Read Next:[\s\S]*?<\/p>/;
       const readNextMatch = currentArticle.match(readNextPattern);
       
       if (readNextMatch) {
