@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { generateTopicUrl } from '../../../lib/api';
+import { generateTopicUrl } from '../../../../lib/api';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;

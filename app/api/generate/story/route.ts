@@ -113,6 +113,52 @@ async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promis
   }
 }
 
+function extractKeyTopics(text: string): string[] {
+  // Remove HTML tags and get clean text
+  const cleanText = text.replace(/<[^>]*>/g, '');
+  
+  // Extract company names, ticker symbols, and key terms
+  const topics: string[] = [];
+  
+  // Look for ticker symbols (NYSE: XXX format)
+  const tickerMatch = cleanText.match(/NYSE:\s*([A-Z]+)/);
+  if (tickerMatch) {
+    topics.push(tickerMatch[1]);
+  }
+  
+  // Look for company names (words that start with capital letters, but avoid incomplete phrases)
+  const companyMatches = cleanText.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g);
+  if (companyMatches) {
+    // Filter out common words, incomplete phrases, and add unique company names
+    const commonWords = ['The', 'And', 'Or', 'But', 'For', 'With', 'From', 'This', 'That', 'They', 'Have', 'Will', 'Said', 'According', 'Recently', 'Today'];
+    const companies = companyMatches.filter(word => 
+      !commonWords.includes(word) && 
+      word.length > 2 && 
+      !word.includes('(') && !word.includes(')') && !word.includes(':') &&
+      !topics.includes(word)
+    );
+    topics.push(...companies.slice(0, 3)); // Limit to top 3 companies
+  }
+  
+  // Look for key financial terms and phrases
+  const financialTerms = ['investor', 'stock', 'market', 'trading', 'earnings', 'revenue', 'profit', 'analyst', 'rating', 'price target', 'investment', 'long term', 'potential'];
+  financialTerms.forEach(term => {
+    if (cleanText.toLowerCase().includes(term) && !topics.includes(term)) {
+      topics.push(term);
+    }
+  });
+  
+  // Look for specific phrases that would make good topics
+  const specificPhrases = ['Jim Cramer', 'CNBC', 'online used car', 'used car dealer'];
+  specificPhrases.forEach(phrase => {
+    if (cleanText.toLowerCase().includes(phrase.toLowerCase()) && !topics.includes(phrase)) {
+      topics.push(phrase);
+    }
+  });
+  
+  return topics.slice(0, 5); // Return top 5 topics
+}
+
 function buildPrompt({ ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts }: { ticker: string; sourceText: string; analystSummary: string; priceSummary: string; priceActionDay?: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[] }) {
   
   console.log('buildPrompt called with sourceUrl:', sourceUrl);
@@ -231,10 +277,16 @@ ${includeCTA && ctaText ? `
 ` : ''}
 
 ${includeSubheads && subheadTexts && subheadTexts.length > 0 ? `
-- Subhead Integration: Insert the following subheads at strategic points throughout the article (after approximately 20%, 50%, and 80% of the content):
+- Subhead Integration: Insert the following subheads at specific positions:
   ${subheadTexts.map((subhead, index) => `${index + 1}. ${subhead}`).join('\n  ')}
   
-  Format each subhead as a standalone line with proper spacing before and after.
+  CRITICAL SUBHEAD PLACEMENT RULES:
+  - First subhead: If there's a CTA line, place the first subhead immediately after the CTA line. If there's no CTA line, place the first subhead after the first or second paragraph (whichever provides better flow).
+  - Second subhead: Place after approximately 50% of the content, ensuring it covers at least 2 paragraphs.
+  - Third subhead: Place after approximately 80% of the content, ensuring it covers at least 2 paragraphs.
+  - Each subhead must cover at least 2 paragraphs of content - do not place subheads too close together.
+  - Format each subhead as a standalone line with proper spacing before and after.
+  - Do not place subheads in the lead paragraph or immediately after the lead paragraph.
 ` : ''}
 
 ${relatedArticles && relatedArticles.length > 0 ? `
@@ -351,26 +403,151 @@ export async function POST(req: Request) {
     // Post-process the story to replace topic-based hyperlinks with appropriate Benzinga URLs
     if (sourceUrl) {
       console.log('Processing lead paragraph hyperlink...');
-      // Find the lead paragraph hyperlink and check if it should be topic-based
+      // Find the lead paragraph hyperlink and always try to make it topic-based
       const leadParagraphMatch = story.match(/<p>([^<]*<a href="[^"]*">([^<]+)<\/a>[^<]*)<\/p>/);
       if (leadParagraphMatch) {
         const linkedPhrase = leadParagraphMatch[2];
         console.log('Found linked phrase in lead:', linkedPhrase);
-        if (shouldLinkToTopic(linkedPhrase, sourceUrl)) {
-          try {
-            const topicUrl = await generateTopicUrl(linkedPhrase);
-            console.log('Generated topic URL:', topicUrl);
-            // Replace the source URL with the topic URL in the lead paragraph
-            story = story.replace(
-              new RegExp(`<a href="${sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}">${linkedPhrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<\/a>`),
-              `<a href="${topicUrl}">${linkedPhrase}</a>`
-            );
-          } catch (error) {
-            console.error('Error generating topic URL for lead paragraph:', error);
+        // Always try to generate a topic URL for lead paragraph hyperlinks
+        try {
+          // Find the first paragraph (lead paragraph) and extract the actual hyperlink text
+          const paragraphs = story.split('</p>');
+          if (paragraphs.length > 0) {
+            const leadParagraph = paragraphs[0];
+            const hyperlinkMatch = leadParagraph.match(/<a href="[^"]*">([^<]+)<\/a>/);
+            
+            if (hyperlinkMatch) {
+              const actualLinkText = hyperlinkMatch[1];
+              console.log('Found actual hyperlink text in lead:', actualLinkText);
+              
+              // Generate topic URL using the actual hyperlink text
+              const topicUrl = await generateTopicUrl(actualLinkText);
+              console.log('Generated topic URL for lead paragraph:', topicUrl);
+              
+              // Replace any hyperlink in the lead paragraph with the topic URL
+              const updatedLeadParagraph = leadParagraph.replace(
+                /<a href="[^"]*">([^<]+)<\/a>/,
+                `<a href="${topicUrl}">$1</a>`
+              );
+              
+              if (updatedLeadParagraph !== leadParagraph) {
+                paragraphs[0] = updatedLeadParagraph;
+                story = paragraphs.join('</p>');
+                console.log('Successfully replaced lead paragraph hyperlink with topic URL');
+              } else {
+                console.log('No hyperlink found to replace in lead paragraph');
+              }
+            } else {
+              console.log('No hyperlink found in lead paragraph - adding one');
+              // Add a hyperlink to the lead paragraph if one is missing
+              const words = leadParagraph.replace(/<[^>]*>/g, '').split(/\s+/);
+              let hyperlinkAdded = false;
+              
+              for (let i = 0; i < words.length - 2; i++) {
+                const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+                // Skip if the phrase contains HTML tags, is too generic, or is incomplete
+                if (!phrase.includes('<') && !phrase.includes('>') && 
+                    !phrase.includes('(') && !phrase.includes(')') && // Skip phrases with parentheses
+                    !phrase.includes(':') && // Skip phrases with colons
+                    !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i].toLowerCase()) &&
+                    !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 1].toLowerCase()) &&
+                    !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 2].toLowerCase()) &&
+                    words[i].length > 2 && words[i + 1].length > 2 && words[i + 2].length > 2) { // Ensure all words are substantial
+                  
+                  // Always try to generate a topic URL for lead paragraph hyperlinks
+                  let targetUrl = sourceUrl;
+                  try {
+                    const topicUrl = await generateTopicUrl(phrase);
+                    targetUrl = topicUrl;
+                    console.log('Generated topic URL for fallback hyperlink:', topicUrl);
+                  } catch (error) {
+                    console.error('Error generating topic URL for fallback hyperlink:', error);
+                    // Only fallback to source URL if topic URL generation completely fails
+                    targetUrl = sourceUrl;
+                  }
+                  
+                  // Create the hyperlinked version
+                  const hyperlinkedPhrase = `<a href="${targetUrl}">${phrase}</a>`;
+                  const updatedLeadParagraph = leadParagraph.replace(phrase, hyperlinkedPhrase);
+                  paragraphs[0] = updatedLeadParagraph;
+                  story = paragraphs.join('</p>');
+                  console.log('Added hyperlink to lead paragraph:', phrase, '->', targetUrl);
+                  hyperlinkAdded = true;
+                  break;
+                }
+              }
+              
+              if (!hyperlinkAdded) {
+                console.log('Could not find suitable phrase for hyperlink in lead paragraph');
+              }
+            }
           }
+        } catch (error) {
+          console.error('Error generating topic URL for lead paragraph:', error);
+          // Keep the original hyperlink if topic URL generation fails
         }
       } else {
-        console.log('No lead paragraph hyperlink found');
+        console.log('No lead paragraph hyperlink found - adding one');
+        // Add a hyperlink to the lead paragraph if one is missing
+        const paragraphs = story.split('</p>');
+        if (paragraphs.length > 0) {
+          const leadParagraph = paragraphs[0];
+          // Find a suitable phrase to hyperlink (3 consecutive words)
+          const words = leadParagraph.replace(/<[^>]*>/g, '').split(/\s+/);
+          let hyperlinkAdded = false;
+          
+          for (let i = 0; i < words.length - 2; i++) {
+            const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+            // Skip if the phrase contains HTML tags or is too generic
+            if (!phrase.includes('<') && !phrase.includes('>') && 
+                !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i].toLowerCase()) &&
+                !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 1].toLowerCase()) &&
+                !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 2].toLowerCase())) {
+              
+              // Always try to generate a topic URL for lead paragraph hyperlinks
+              let targetUrl = sourceUrl;
+              try {
+                // Extract key topics from the lead paragraph for better search
+                const keyTopics = extractKeyTopics(leadParagraph);
+                console.log('Extracted key topics from lead:', keyTopics);
+                
+                // Try each key topic to find the most relevant article
+                for (const topic of keyTopics) {
+                  const topicUrl = await generateTopicUrl(topic);
+                  if (topicUrl && topicUrl !== 'https://www.benzinga.com/news') {
+                    targetUrl = topicUrl;
+                    console.log('Generated topic URL for fallback hyperlink:', topicUrl, 'using topic:', topic);
+                    break;
+                  }
+                }
+                
+                // If no relevant topic found, try the original phrase
+                if (targetUrl === sourceUrl) {
+                  const topicUrl = await generateTopicUrl(phrase);
+                  targetUrl = topicUrl;
+                  console.log('Generated topic URL using original phrase:', topicUrl);
+                }
+              } catch (error) {
+                console.error('Error generating topic URL for fallback hyperlink:', error);
+                // Only fallback to source URL if topic URL generation completely fails
+                targetUrl = sourceUrl;
+              }
+              
+              // Create the hyperlinked version
+              const hyperlinkedPhrase = `<a href="${targetUrl}">${phrase}</a>`;
+              const updatedLeadParagraph = leadParagraph.replace(phrase, hyperlinkedPhrase);
+              paragraphs[0] = updatedLeadParagraph;
+              story = paragraphs.join('</p>');
+              console.log('Added hyperlink to lead paragraph:', phrase, '->', targetUrl);
+              hyperlinkAdded = true;
+              break;
+            }
+          }
+          
+          if (!hyperlinkAdded) {
+            console.log('Could not find suitable phrase for hyperlink in lead paragraph');
+          }
+        }
       }
     }
     

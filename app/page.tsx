@@ -47,6 +47,10 @@ export default function PRStoryGeneratorPage() {
   const [loadingContext, setLoadingContext] = useState(false);
   const [contextError, setContextError] = useState('');
   const [previouslyUsedContextUrls, setPreviouslyUsedContextUrls] = useState<string[]>([]);
+  const [loadingTechnicalContext, setLoadingTechnicalContext] = useState(false);
+  const [technicalContextError, setTechnicalContextError] = useState('');
+  const [testTopicResult, setTestTopicResult] = useState<any>(null);
+  const [testingTopic, setTestingTopic] = useState(false);
 
   // Client-only: Convert PR or Article HTML body to plain text when selected
   useEffect(() => {
@@ -586,6 +590,44 @@ export default function PRStoryGeneratorPage() {
     }
   };
 
+  // Add technical context using Benzinga API data
+  const addTechnicalContext = async () => {
+    if (!article.trim()) {
+      setTechnicalContextError('Generated article is required');
+      return;
+    }
+
+    if (!ticker.trim()) {
+      setTechnicalContextError('Ticker is required for technical context');
+      return;
+    }
+    
+    setTechnicalContextError('');
+    setLoadingTechnicalContext(true);
+    
+    try {
+      const res = await fetch('/api/generate/add-technical-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          currentArticle: article,
+          ticker: ticker
+        }),
+      });
+      
+      const data = await res.json();
+      if (data.error) {
+        setTechnicalContextError(data.error);
+      } else if (data.updatedArticle) {
+        setArticle(data.updatedArticle);
+      }
+    } catch (error) {
+      setTechnicalContextError('Failed to add technical context.');
+    } finally {
+      setLoadingTechnicalContext(false);
+    }
+  };
+
   const handleScrapeUrl = async () => {
     if (!sourceUrl.trim()) {
       return;
@@ -669,9 +711,11 @@ export default function PRStoryGeneratorPage() {
     setCopiedSubheads(false);
     setIncludeCTA(false);
     setIncludeSubheads(false);
-    setLoadingContext(false);
-    setContextError('');
-    setPreviouslyUsedContextUrls([]);
+         setLoadingContext(false);
+     setContextError('');
+     setPreviouslyUsedContextUrls([]);
+     setLoadingTechnicalContext(false);
+     setTechnicalContextError('');
   };
 
   const handleAnalystNoteTextExtracted = (text: string, noteTicker: string) => {
@@ -866,6 +910,28 @@ export default function PRStoryGeneratorPage() {
     }
   };
 
+  const testTopicUrl = async () => {
+    setTestingTopic(true);
+    setTestTopicResult(null);
+    try {
+      const response = await fetch('/api/test-topic-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phrase: 'CNBC\'s Jim Cramer' }),
+      });
+      
+      const data = await response.json();
+      setTestTopicResult(data);
+    } catch (error) {
+      console.error('Error testing topic URL:', error);
+      setTestTopicResult({ error: 'Failed to test topic URL' });
+    } finally {
+      setTestingTopic(false);
+    }
+  };
+
   return (
     <div style={{ maxWidth: 700, margin: 'auto', padding: 20, fontFamily: 'Arial, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -921,6 +987,20 @@ export default function PRStoryGeneratorPage() {
           style={{ padding: '6px 12px' }}
         >
           Analyst Note Upload
+        </button>
+        <button
+          onClick={testTopicUrl}
+          disabled={testingTopic}
+          style={{ 
+            padding: '6px 12px', 
+            background: testingTopic ? '#6b7280' : '#dc2626', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: 4,
+            cursor: testingTopic ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {testingTopic ? 'Testing...' : 'Test Topic URL'}
         </button>
       </div>
       
@@ -1001,42 +1081,58 @@ export default function PRStoryGeneratorPage() {
       </div>
       
       {/* Generated Article - Moved here to appear directly under Generate Story button */}
-      {genError && <div style={{ color: 'red', marginBottom: 10 }}>{genError}</div>}
-      {contextError && <div style={{ color: 'red', marginBottom: 10 }}>{contextError}</div>}
+             {genError && <div style={{ color: 'red', marginBottom: 10 }}>{genError}</div>}
+       {contextError && <div style={{ color: 'red', marginBottom: 10 }}>{contextError}</div>}
+       {technicalContextError && <div style={{ color: 'red', marginBottom: 10 }}>{technicalContextError}</div>}
       {article && (
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <h2>Generated Article</h2>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={addContext}
-                disabled={loadingContext}
-                style={{ 
-                  padding: '8px 16px', 
-                  background: loadingContext ? '#6b7280' : '#dc2626', 
-                  color: 'white', 
-                  border: 'none', 
-                  borderRadius: 4,
-                  fontSize: 14,
-                  cursor: loadingContext ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {loadingContext ? 'Adding Benzinga Context...' : 'Add Benzinga Context'}
-              </button>
-              <button
-                onClick={handleCopyArticle}
-                style={{ 
-                  padding: '8px 16px', 
-                  background: copied ? '#059669' : '#2563eb', 
-                  color: 'white', 
-                  border: 'none', 
-                  borderRadius: 4,
-                  fontSize: 14
-                }}
-              >
-                {copied ? 'Copied!' : 'Copy Article'}
-              </button>
-            </div>
+                         <div style={{ display: 'flex', gap: 10 }}>
+               <button
+                 onClick={addContext}
+                 disabled={loadingContext}
+                 style={{ 
+                   padding: '8px 16px', 
+                   background: loadingContext ? '#6b7280' : '#dc2626', 
+                   color: 'white', 
+                   border: 'none', 
+                   borderRadius: 4,
+                   fontSize: 14,
+                   cursor: loadingContext ? 'not-allowed' : 'pointer'
+                 }}
+               >
+                 {loadingContext ? 'Adding Benzinga Context...' : 'Add Benzinga Context'}
+               </button>
+               <button
+                 onClick={addTechnicalContext}
+                 disabled={loadingTechnicalContext}
+                 style={{ 
+                   padding: '8px 16px', 
+                   background: loadingTechnicalContext ? '#6b7280' : '#059669', 
+                   color: 'white', 
+                   border: 'none', 
+                   borderRadius: 4,
+                   fontSize: 14,
+                   cursor: loadingTechnicalContext ? 'not-allowed' : 'pointer'
+                 }}
+               >
+                 {loadingTechnicalContext ? 'Adding Technical Context...' : 'Add Technical Context'}
+               </button>
+               <button
+                 onClick={handleCopyArticle}
+                 style={{ 
+                   padding: '8px 16px', 
+                   background: copied ? '#059669' : '#2563eb', 
+                   color: 'white', 
+                   border: 'none', 
+                   borderRadius: 4,
+                   fontSize: 14
+                 }}
+               >
+                 {copied ? 'Copied!' : 'Copy Article'}
+               </button>
+             </div>
           </div>
           <div
             ref={articleRef}
@@ -1062,6 +1158,68 @@ export default function PRStoryGeneratorPage() {
               ) 
             }}
           />
+        </div>
+      )}
+      
+      {/* Topic URL Test Results */}
+      {testTopicResult && (
+        <div style={{ marginBottom: 20 }}>
+          <h2>Topic URL Test Results</h2>
+          <div style={{ background: '#f9fafb', padding: 16, borderRadius: 4, border: '1px solid #e5e7eb' }}>
+            {testTopicResult.error ? (
+              <div style={{ color: 'red', backgroundColor: '#fef2f2', padding: '12px', borderRadius: '4px', border: '1px solid #fecaca' }}>
+                {testTopicResult.error}
+              </div>
+            ) : (
+              <div style={{ fontSize: 14 }}>
+                <div style={{ marginBottom: 12 }}>
+                  <strong>Input:</strong> {testTopicResult.phrase}<br/>
+                  <strong>Clean Topic:</strong> {testTopicResult.cleanTopic}<br/>
+                  <strong>Terms:</strong> {testTopicResult.terms.join(', ')}
+                </div>
+                
+                <div style={{ marginBottom: 12 }}>
+                  <strong>API Results:</strong><br/>
+                  • Total Articles: {testTopicResult.totalArticlesFromAPI}<br/>
+                  • Topic Relevant: {testTopicResult.topicRelevantArticles}<br/>
+                  • Company Articles: {testTopicResult.companyArticles}<br/>
+                  • Found Company: {testTopicResult.foundCompany || 'None'}<br/>
+                  • Final URL: <a href={testTopicResult.finalUrl} target="_blank" style={{ color: '#2563eb', textDecoration: 'underline' }}>{testTopicResult.finalUrl}</a>
+                </div>
+                
+                {testTopicResult.topScoredArticles && testTopicResult.topScoredArticles.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <strong>Top Scored Articles:</strong>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: 8 }}>
+                      {testTopicResult.topScoredArticles.map((article: any, index: number) => (
+                        <div key={index} style={{ border: '1px solid #d1d5db', padding: 8, marginBottom: 8, borderRadius: 4, backgroundColor: 'white' }}>
+                          <div><strong>Score:</strong> {article.score}</div>
+                          <div><strong>Headline:</strong> {article.headline}</div>
+                          <div><strong>URL:</strong> <a href={article.url} target="_blank" style={{ color: '#2563eb', textDecoration: 'underline' }}>{article.url}</a></div>
+                          <div><strong>Matching Terms:</strong> {article.matchingTerms.join(', ')}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {testTopicResult.allTopicArticles && testTopicResult.allTopicArticles.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <strong>All Topic Articles ({testTopicResult.allTopicArticles.length}):</strong>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: 8 }}>
+                      {testTopicResult.allTopicArticles.map((article: any, index: number) => (
+                        <div key={index} style={{ border: '1px solid #d1d5db', padding: 8, marginBottom: 8, borderRadius: 4, backgroundColor: 'white' }}>
+                          <div><strong>Headline:</strong> {article.headline}</div>
+                          <div><strong>URL:</strong> <a href={article.url} target="_blank" style={{ color: '#2563eb', textDecoration: 'underline' }}>{article.url}</a></div>
+                          <div><strong>Body:</strong> {article.body}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
       

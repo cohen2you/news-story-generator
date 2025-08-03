@@ -99,32 +99,144 @@ export async function generateTopicUrl(topic: string): Promise<string> {
     
     // Try to find relevant articles using the Benzinga News API
     const searchTerm = terms.slice(0, 3).join(' '); // Use up to 3 terms
-    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=5&fields=headline,title,url,channels&accept=application/json&displayOutput=full`;
+    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=20&fields=headline,title,url,channels,body&displayOutput=full`;
     
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
     if (!res.ok) {
+      console.error('Benzinga API error:', res.status, res.statusText);
       return 'https://www.benzinga.com/news';
     }
     
-    const data = await res.json();
+    let data;
+    try {
+      const responseText = await res.text();
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error parsing Benzinga API response:', parseError);
+      return 'https://www.benzinga.com/news';
+    }
+    
     if (!Array.isArray(data) || data.length === 0) {
       return 'https://www.benzinga.com/news';
     }
     
-    // Look for articles that contain our search terms
-    const relevantArticles = data.filter((article: any) => {
+    // First, try to find articles that match the specific topic
+    const topicArticles = data.filter((article: any) => {
       const headline = (article.headline || article.title || '').toLowerCase();
-      return terms.some(term => headline.includes(term));
+      const content = (article.body || '').toLowerCase();
+      
+      // Check for exact topic match first
+      if (headline.includes(cleanTopic) || content.includes(cleanTopic)) {
+        return true;
+      }
+      
+      // Check if multiple terms appear in the headline or content
+      const matchingTerms = terms.filter(term => 
+        headline.includes(term) || content.includes(term)
+      );
+      
+      // If we have at least 2 matching terms, it's relevant
+      if (matchingTerms.length >= 2) {
+        return true;
+      }
+      
+      // If we have at least 1 matching term and it's a significant term, it might be relevant
+      if (matchingTerms.length >= 1) {
+        const significantTerms = ['cramer', 'jim', 'cnbc', 'analyst', 'investor', 'stock', 'market', 'earnings', 'carvana', 'cvna'];
+        return matchingTerms.some(term => significantTerms.includes(term));
+      }
+      
+      return false;
     });
     
-    if (relevantArticles.length > 0) {
-      // Return the URL of the most relevant article
-      return relevantArticles[0].url || 'https://www.benzinga.com/news';
+    // If we found topic-specific articles, score and return the best one
+    if (topicArticles.length > 0) {
+      const scoredArticles = topicArticles.map((article: any) => {
+        const headline = (article.headline || article.title || '').toLowerCase();
+        const content = (article.body || '').toLowerCase();
+        let score = 0;
+        
+        // Exact topic match gets highest score
+        if (headline.includes(cleanTopic) || content.includes(cleanTopic)) {
+          score += 200;
+        }
+        
+        // Headline matches get higher score than content matches
+        terms.forEach(term => {
+          if (headline.includes(term)) score += 50;
+          if (content.includes(term)) score += 20;
+        });
+        
+        // Bonus for financial/stock market content
+        const financialTerms = ['stock', 'market', 'investor', 'analyst', 'earnings', 'trading'];
+        financialTerms.forEach(term => {
+          if (headline.includes(term)) score += 30;
+          if (content.includes(term)) score += 15;
+        });
+        
+        // Penalize articles that seem unrelated
+        const unrelatedTerms = ['perplexity', 'aravind', 'srinivas', 'ceo', 'trump', 'biden', 'politics', 'election'];
+        unrelatedTerms.forEach(term => {
+          if (headline.includes(term) || content.includes(term)) {
+            score -= 100;
+          }
+        });
+        
+        return { ...article, score };
+      }).sort((a, b) => b.score - a.score);
+      
+      const bestArticle = scoredArticles[0];
+      if (bestArticle && bestArticle.url && bestArticle.url.startsWith('http')) {
+        return bestArticle.url;
+      }
     }
     
-    // Fallback: construct a topic-based URL
-    const topicSlug = terms.join('-');
-    return `https://www.benzinga.com/news/${topicSlug}`;
+    // If no topic-specific articles found, try to find articles about the main company/ticker
+    const companyTerms = ['carvana', 'cvna', 'tesla', 'tsla', 'apple', 'aapl', 'amazon', 'amzn', 'microsoft', 'msft'];
+    const foundCompany = companyTerms.find(term => cleanTopic.includes(term));
+    
+    if (foundCompany) {
+      const companyArticles = data.filter((article: any) => {
+        const headline = (article.headline || article.title || '').toLowerCase();
+        const content = (article.body || '').toLowerCase();
+        return headline.includes(foundCompany) || content.includes(foundCompany);
+      });
+      
+      if (companyArticles.length > 0) {
+        // Score company articles
+        const scoredCompanyArticles = companyArticles.map((article: any) => {
+          const headline = (article.headline || article.title || '').toLowerCase();
+          const content = (article.body || '').toLowerCase();
+          let score = 0;
+          
+          // Company mentions get high priority
+          if (headline.includes(foundCompany)) score += 100;
+          if (content.includes(foundCompany)) score += 50;
+          
+          // Analyst mentions get bonus
+          const analystTerms = ['cramer', 'jim cramer', 'analyst', 'rating'];
+          analystTerms.forEach(term => {
+            if (headline.includes(term)) score += 80;
+            if (content.includes(term)) score += 40;
+          });
+          
+          return { ...article, score };
+        }).sort((a, b) => b.score - a.score);
+        
+        const bestCompanyArticle = scoredCompanyArticles[0];
+        if (bestCompanyArticle && bestCompanyArticle.url && bestCompanyArticle.url.startsWith('http')) {
+          return bestCompanyArticle.url;
+        }
+      }
+    }
+    
+    // If no relevant articles found, return the main news page
+    return 'https://www.benzinga.com/news';
     
   } catch (error) {
     console.error('Error generating topic URL:', error);
