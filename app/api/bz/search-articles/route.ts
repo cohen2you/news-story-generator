@@ -137,7 +137,7 @@ export async function POST(request: Request) {
     
               // Filter articles - be more permissive for ticker-based searches
      const matchingArticles = data
-       .filter(item => {
+       .filter((item: any) => {
          // Exclude press releases
          if (Array.isArray(item.channels) && item.channels.some((ch: any) => 
            typeof ch.name === 'string' && prChannelNames.includes(normalize(ch.name))
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
            
            // For ticker searches, include articles that might be related
            const relatedTerms = getRelatedTerms(searchTermLower);
-           const hasRelatedTerms = relatedTerms.some(term => 
+           const hasRelatedTerms = relatedTerms.some((term: string) => 
              headline.includes(term) || body.includes(term)
            );
            
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
            const body = (item.body || '').toLowerCase();
            
            // Split search term into individual words for more flexible matching
-           const searchWords = searchTermLower.split(/\s+/).filter(word => word.length > 1);
+           const searchWords = searchTermLower.split(/\s+/).filter((word: string) => word.length > 1);
            
            // Check for exact phrase match first (highest priority)
            if (headline.includes(searchTermLower) || body.includes(searchTermLower)) {
@@ -200,8 +200,8 @@ export async function POST(request: Request) {
            
            // Check for individual word matches
            if (searchWords.length > 1) {
-             const headlineWordCount = searchWords.filter(word => headline.includes(word)).length;
-             const bodyWordCount = searchWords.filter(word => body.includes(word)).length;
+             const headlineWordCount = searchWords.filter((word: string) => headline.includes(word)).length;
+             const bodyWordCount = searchWords.filter((word: string) => body.includes(word)).length;
              return headlineWordCount >= 1 || bodyWordCount >= 1;
            }
            
@@ -225,7 +225,7 @@ export async function POST(request: Request) {
     // If no results, let's log some sample articles to debug
     if (matchingArticles.length === 0 && data.length > 0) {
       console.log('Sample articles from the dataset:');
-      data.slice(0, 10).forEach((item, index) => {
+      data.slice(0, 10).forEach((item: any, index: number) => {
         console.log(`${index + 1}. Headline: ${item.headline || item.title}`);
         console.log(`   Body preview: ${(item.body || '').substring(0, 150)}...`);
         console.log(`   Created: ${item.created}`);
@@ -234,15 +234,15 @@ export async function POST(request: Request) {
       
       // Also check if any articles contain related terms
       const relatedTerms = ['weight', 'loss', 'drug', 'pharma', 'novo', 'nordisk', 'ozempic', 'semaglutide'];
-      const relatedArticles = data.filter(item => {
+      const relatedArticles = data.filter((item: any) => {
         const headline = (item.headline || item.title || '').toLowerCase();
         const body = (item.body || '').toLowerCase();
-        return relatedTerms.some(term => headline.includes(term) || body.includes(term));
+        return relatedTerms.some((term: string) => headline.includes(term) || body.includes(term));
       });
       
-      if (relatedArticles.length > 0) {
-        console.log(`Found ${relatedArticles.length} articles with related terms:`);
-        relatedArticles.slice(0, 5).forEach((item, index) => {
+              if (relatedArticles.length > 0) {
+          console.log(`Found ${relatedArticles.length} articles with related terms:`);
+          relatedArticles.slice(0, 5).forEach((item: any, index: number) => {
           console.log(`${index + 1}. Headline: ${item.headline || item.title}`);
         });
       }
@@ -275,7 +275,7 @@ export async function POST(request: Request) {
         console.log(`Trying related terms: ${relatedTerms.join(', ')}`);
         
                  const relatedArticles = data
-           .filter(item => {
+           .filter((item: any) => {
              // Exclude press releases
              if (Array.isArray(item.channels) && item.channels.some((ch: any) => 
                typeof ch.name === 'string' && prChannelNames.includes(normalize(ch.name))
@@ -292,7 +292,7 @@ export async function POST(request: Request) {
             const body = (item.body || '').toLowerCase();
             
             // Check if any related term appears in headline or body
-            return relatedTerms.some(term => 
+            return relatedTerms.some((term: string) => 
               headline.includes(term.toLowerCase()) || body.includes(term.toLowerCase())
             );
           })
@@ -350,7 +350,7 @@ function calculateRelevanceScore(headline: string, body: string, searchTerm: str
   const searchWords = searchTerm.split(/\s+/);
   const headlineWords = headlineLower.split(/\s+/);
   
-  searchWords.forEach(word => {
+  searchWords.forEach((word: string) => {
     if (headlineWords.includes(word)) {
       score += 20;
     }
@@ -358,7 +358,7 @@ function calculateRelevanceScore(headline: string, body: string, searchTerm: str
   
   // Check for individual word matches in body
   const bodyWords = bodyLower.split(/\s+/);
-  searchWords.forEach(word => {
+  searchWords.forEach((word: string) => {
     if (bodyWords.includes(word)) {
       score += 10;
     }
