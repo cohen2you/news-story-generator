@@ -3,6 +3,8 @@ import { getPrimaryPrompt } from '../../../../lib/prompts/primary';
 import { MODEL_CONFIG } from '../../../../lib/api';
 
 const MODEL = 'gpt-4o';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 // Helper to call OpenAI Chat Completion API
 async function callOpenAI(prompt: string) {
