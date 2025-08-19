@@ -1476,10 +1476,47 @@ export default function PRStoryGeneratorPage() {
                     color: 'white', 
                     border: 'none', 
                     borderRadius: 4,
-                    fontSize: 14
+                    fontSize: 14,
+                    marginRight: 8
                   }}
                 >
                   {copied ? 'Copied!' : 'Copy Article'}
+                </button>
+                <button
+                  onClick={() => {
+                    // Convert HTML to plain text with proper paragraph breaks
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = article;
+                    const plainText = tempDiv.textContent || tempDiv.innerText || '';
+                    
+                    // Add double line breaks between paragraphs for better formatting
+                    const formattedText = plainText
+                      .replace(/\n\s*\n/g, '\n\n') // Normalize paragraph breaks
+                      .replace(/\n/g, '\n\n'); // Add extra line breaks for better separation
+                    
+                    navigator.clipboard.writeText(formattedText).then(() => {
+                      alert('Article copied as plain text with paragraph breaks!');
+                    }).catch(() => {
+                      // Fallback for older browsers
+                      const textArea = document.createElement('textarea');
+                      textArea.value = formattedText;
+                      document.body.appendChild(textArea);
+                      textArea.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(textArea);
+                      alert('Article copied as plain text with paragraph breaks!');
+                    });
+                  }}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: '#059669', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: 4,
+                    fontSize: 14
+                  }}
+                >
+                  Copy as Plain Text
                 </button>
               </div>
           </div>

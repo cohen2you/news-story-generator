@@ -32,6 +32,8 @@ export async function POST(req: Request) {
 3. Combining similar ideas into single, more concise statements
 4. NEVER remove or modify any [HYPERLINK_X] placeholders - they are sacred
 5. NEVER remove the "Read Next" section
+6. CRITICAL: Maintain all HTML paragraph tags (<p> and </p>) exactly as they appear
+7. CRITICAL: Do NOT remove or modify any HTML formatting - preserve the structure
 
 SOURCE MATERIAL (for similarity checking):
 ${sourceText || 'No source material provided'}
@@ -68,14 +70,20 @@ CHANGES MADE:
     const finalLinks = (finalArticle.match(/<a[^>]+>.*?<\/a>/g) || []).length;
     const originalLinks = hyperlinks.length;
     
-    if (finalLinks !== originalLinks) {
-      // If hyperlinks were lost, return the original article with a warning
+    // Validate that paragraph tags are preserved
+    const originalParagraphs = (article.match(/<p>/g) || []).length;
+    const finalParagraphs = (finalArticle.match(/<p>/g) || []).length;
+    
+    if (finalLinks !== originalLinks || finalParagraphs !== originalParagraphs) {
+      // If hyperlinks or paragraph structure were lost, return the original article with a warning
       return NextResponse.json({ 
         reviewedArticle: article,
-        changes: ['Editorial review skipped - hyperlink preservation failed'],
+        changes: ['Editorial review skipped - formatting preservation failed'],
         originalWordCount: article.split(/\s+/).length,
         newWordCount: article.split(/\s+/).length,
-        warning: 'Could not preserve all hyperlinks during condensation'
+        warning: finalLinks !== originalLinks 
+          ? 'Could not preserve all hyperlinks during condensation'
+          : 'Could not preserve paragraph structure during condensation'
       });
     }
 
