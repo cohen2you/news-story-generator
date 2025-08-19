@@ -73,10 +73,10 @@ export async function GET() {
           }))
         });
 
-      } catch (error) {
+      } catch (error: any) {
         results.push({
           test: `URL ${i + 1}`,
-          error: error.message
+          error: error.message || 'Unknown error'
         });
       }
 
