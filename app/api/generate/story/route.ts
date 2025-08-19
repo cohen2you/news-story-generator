@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { generateTopicUrl, shouldLinkToTopic } from '../../../../lib/api';
+import { MODEL_CONFIG, generateTopicUrl, shouldLinkToTopic } from '../../../../lib/api';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
-const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 const MODEL = 'gpt-4o';
 
@@ -420,8 +420,8 @@ export async function POST(req: Request) {
               const actualLinkText = hyperlinkMatch[1];
               console.log('Found actual hyperlink text in lead:', actualLinkText);
               
-              // Generate topic URL using the actual hyperlink text
-              const topicUrl = await generateTopicUrl(actualLinkText);
+              // Generate topic URL using the actual hyperlink text and lead paragraph context
+              const topicUrl = await generateTopicUrl(actualLinkText, leadParagraph);
               console.log('Generated topic URL for lead paragraph:', topicUrl);
               
               // Replace any hyperlink in the lead paragraph with the topic URL
@@ -457,7 +457,7 @@ export async function POST(req: Request) {
                   // Always try to generate a topic URL for lead paragraph hyperlinks
                   let targetUrl = sourceUrl;
                   try {
-                    const topicUrl = await generateTopicUrl(phrase);
+                    const topicUrl = await generateTopicUrl(phrase, leadParagraph);
                     targetUrl = topicUrl;
                     console.log('Generated topic URL for fallback hyperlink:', topicUrl);
                   } catch (error) {
@@ -513,7 +513,7 @@ export async function POST(req: Request) {
                 
                 // Try each key topic to find the most relevant article
                 for (const topic of keyTopics) {
-                  const topicUrl = await generateTopicUrl(topic);
+                  const topicUrl = await generateTopicUrl(topic, leadParagraph);
                   if (topicUrl && topicUrl !== 'https://www.benzinga.com/news') {
                     targetUrl = topicUrl;
                     console.log('Generated topic URL for fallback hyperlink:', topicUrl, 'using topic:', topic);
@@ -523,7 +523,7 @@ export async function POST(req: Request) {
                 
                 // If no relevant topic found, try the original phrase
                 if (targetUrl === sourceUrl) {
-                  const topicUrl = await generateTopicUrl(phrase);
+                  const topicUrl = await generateTopicUrl(phrase, leadParagraph);
                   targetUrl = topicUrl;
                   console.log('Generated topic URL using original phrase:', topicUrl);
                 }

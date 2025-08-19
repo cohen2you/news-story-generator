@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getPrimaryPrompt } from '../../../../lib/prompts/primary';
+import { MODEL_CONFIG } from '../../../../lib/api';
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o';
 
 // Helper to call OpenAI Chat Completion API

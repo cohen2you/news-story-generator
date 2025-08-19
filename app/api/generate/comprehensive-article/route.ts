@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import OpenAI from 'openai';
+import { MODEL_CONFIG } from '../../../../lib/api';
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 const BZ_PRICE_URL = 'https://api.benzinga.com/api/v2/quoteDelayed';
 const MODEL = 'gpt-4o';
@@ -51,26 +52,14 @@ Example formats:
 
 Return only the CTA text, no additional formatting.`;
 
-    const response = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+                   const response = await openai.chat.completions.create({
         model: MODEL,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 100,
-      }),
-    });
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to generate CTA');
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content.trim();
+     return response.choices[0].message?.content?.trim() || '';
   } catch (error) {
     console.error('Error generating CTA:', error);
     return '';
@@ -94,26 +83,14 @@ Generate 3 subheadings that:
 
 Return only the 3 subheadings, one per line, no numbering or additional formatting.`;
 
-    const response = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+                   const response = await openai.chat.completions.create({
         model: MODEL,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 150,
-      }),
-    });
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to generate subheads');
-    }
-
-    const data = await response.json();
-    const subheadsText = data.choices[0].message.content.trim();
+     const subheadsText = response.choices[0].message?.content?.trim() || '';
     return subheadsText.split('\n').filter((line: string) => line.trim()).slice(0, 3);
   } catch (error) {
     console.error('Error generating subheads:', error);
@@ -213,33 +190,14 @@ Provide a JSON response with:
 Focus on the actual news content, not generic market data. Only include specific symbols if they are directly mentioned or highly relevant.`;
 
   try {
-    const response = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+                   const response = await openai.chat.completions.create({
         model: MODEL,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
         max_tokens: 500,
-      }),
-    });
+      });
 
-    if (!response.ok) {
-      console.error('OpenAI API error:', await response.text());
-      return {
-        relevantSectors: ['general'],
-        marketImpact: 'neutral',
-        suggestedSymbols: [],
-        financialContext: 'general market sentiment and volatility',
-        newsType: 'general'
-      };
-    }
-
-    const data = await response.json();
-    const analysis = JSON.parse(data.choices[0].message.content);
+     const analysis = JSON.parse(response.choices[0].message?.content || '{}');
     return analysis;
   } catch (error) {
     console.error('Error analyzing source content:', error);
@@ -464,27 +422,14 @@ export async function POST(req: Request) {
       subheadTexts
     );
     
-    const res = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+                   const res = await openai.chat.completions.create({
         model: MODEL,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 1500,
-      }),
-    });
+      });
 
-    if (!res.ok) {
-      const raw = await res.text();
-      return NextResponse.json({ error: `OpenAI error: ${raw}` }, { status: 500 });
-    }
-
-    const data = await res.json();
-    const article = data.choices[0].message.content.trim();
+     const article = res.choices[0].message?.content?.trim() || '';
     
     return NextResponse.json({ 
       article,

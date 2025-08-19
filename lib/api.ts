@@ -1,11 +1,22 @@
+import { NextResponse } from 'next/server';
 import { getFinalAssemblyPrompt } from './prompts/final';
 import { getSecondaryPrompt } from './prompts/secondary';
+
+// Model Configuration - Centralized model selection
+export const MODEL_CONFIG = {
+  // High-quality models for critical content generation
+  HIGH_QUALITY: 'gpt-5',
+  // Fast/cheap models for less critical tasks
+  FAST: 'gpt-4o-mini',
+  // Legacy models (fallback)
+  LEGACY: 'gpt-4o'
+} as const;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o';
 
-async function callOpenAI(prompt: string) {
+export async function callOpenAI(prompt: string) {
   if (!OPENAI_API_KEY) {
     console.error('OPENAI_API_KEY not set!');
     throw new Error('Missing OpenAI API key');
@@ -85,8 +96,14 @@ export async function generateSecondarySection({
 }
 
 // Utility function to generate topic-based Benzinga URLs
-export async function generateTopicUrl(topic: string): Promise<string> {
+export async function generateTopicUrl(topic: string, leadParagraph?: string): Promise<string> {
   try {
+    // If we have the full lead paragraph, use it for better context
+    if (leadParagraph) {
+      return await generateContextualTopicUrl(topic, leadParagraph);
+    }
+    
+    // Original logic for backward compatibility
     // Clean and normalize the topic
     const cleanTopic = topic.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
     
@@ -242,6 +259,183 @@ export async function generateTopicUrl(topic: string): Promise<string> {
     console.error('Error generating topic URL:', error);
     return 'https://www.benzinga.com/news';
   }
+}
+
+// New function for context-aware topic URL generation
+async function generateContextualTopicUrl(topic: string, leadParagraph: string): Promise<string> {
+  try {
+    console.log('Generating contextual topic URL for topic:', topic);
+    console.log('Lead paragraph context:', leadParagraph.substring(0, 200) + '...');
+    
+    // Extract key topics from the entire lead paragraph
+    const keyTopics = extractKeyTopicsFromLead(leadParagraph);
+    console.log('Extracted key topics from lead paragraph:', keyTopics);
+    
+    // Get Benzinga articles
+    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=30&fields=headline,title,url,channels,body&displayOutput=full`;
+    
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!res.ok) {
+      console.error('Benzinga API error:', res.status, res.statusText);
+      return 'https://www.benzinga.com/news';
+    }
+    
+    let data;
+    try {
+      const responseText = await res.text();
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error parsing Benzinga API response:', parseError);
+      return 'https://www.benzinga.com/news';
+    }
+    
+    if (!Array.isArray(data) || data.length === 0) {
+      return 'https://www.benzinga.com/news';
+    }
+    
+    // Score articles based on relevance to the entire lead paragraph context
+    const scoredArticles = data.map((article: any) => {
+      const headline = (article.headline || article.title || '').toLowerCase();
+      const content = (article.body || '').toLowerCase();
+      let score = 0;
+      
+      // Score based on key topics from the lead paragraph
+      keyTopics.forEach(topicInfo => {
+        const { term, weight, type } = topicInfo;
+        
+        if (headline.includes(term.toLowerCase())) {
+          score += weight * 2; // Headline matches get double weight
+        }
+        if (content.includes(term.toLowerCase())) {
+          score += weight;
+        }
+      });
+      
+      // Bonus for exact topic phrase match (the 3-word phrase that's being hyperlinked)
+      const cleanTopic = topic.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      if (headline.includes(cleanTopic) || content.includes(cleanTopic)) {
+        score += 150; // High bonus for exact match
+      }
+      
+      // Bonus for financial/stock market content
+      const financialTerms = ['stock', 'market', 'investor', 'analyst', 'earnings', 'trading', 'price', 'shares'];
+      financialTerms.forEach(term => {
+        if (headline.includes(term)) score += 20;
+        if (content.includes(term)) score += 10;
+      });
+      
+      // Penalize articles that seem unrelated to the story context
+      const unrelatedTerms = ['perplexity', 'aravind', 'srinivas', 'ceo', 'trump', 'biden', 'politics', 'election'];
+      unrelatedTerms.forEach(term => {
+        if (headline.includes(term) || content.includes(term)) {
+          score -= 50;
+        }
+      });
+      
+      return { ...article, score };
+    }).sort((a, b) => b.score - a.score);
+    
+    // Return the highest scoring article
+    const bestArticle = scoredArticles[0];
+    if (bestArticle && bestArticle.score > 0 && bestArticle.url && bestArticle.url.startsWith('http')) {
+      console.log('Selected article with score:', bestArticle.score, 'URL:', bestArticle.url);
+      return bestArticle.url;
+    }
+    
+    // If no good matches found, return main news page
+    return 'https://www.benzinga.com/news';
+    
+  } catch (error) {
+    console.error('Error generating contextual topic URL:', error);
+    return 'https://www.benzinga.com/news';
+  }
+}
+
+// Enhanced function to extract key topics from lead paragraph with weights
+function extractKeyTopicsFromLead(leadParagraph: string): Array<{term: string, weight: number, type: string}> {
+  const cleanText = leadParagraph.replace(/<[^>]*>/g, '').toLowerCase();
+  const topics: Array<{term: string, weight: number, type: string}> = [];
+  
+  // Company names and tickers (highest priority)
+  const companyPatterns = [
+    /apple\s+inc/i,
+    /tesla\s+inc/i,
+    /amazon\.com/i,
+    /microsoft\s+corporation/i,
+    /carvana\s+co/i,
+    /novo\s+nordisk/i,
+    /palo\s+alto\s+networks/i
+  ];
+  
+  companyPatterns.forEach(pattern => {
+    const match = cleanText.match(pattern);
+    if (match) {
+      topics.push({ term: match[0], weight: 100, type: 'company' });
+    }
+  });
+  
+  // Ticker symbols
+  const tickerMatch = cleanText.match(/nasdaq:\s*([a-z]+)/i);
+  if (tickerMatch) {
+    topics.push({ term: tickerMatch[1].toUpperCase(), weight: 90, type: 'ticker' });
+  }
+  
+  // Key technical/business terms (high priority)
+  const technicalTerms = [
+    'encryption', 'privacy', 'cyberattacks', 'back door', 'end-to-end encryption',
+    'earnings', 'revenue', 'profit', 'analyst', 'rating', 'price target',
+    'stock', 'market', 'trading', 'investor', 'investment',
+    'government', 'policy', 'regulation', 'legal', 'court'
+  ];
+  
+  technicalTerms.forEach(term => {
+    if (cleanText.includes(term)) {
+      topics.push({ term, weight: 80, type: 'technical' });
+    }
+  });
+  
+  // Specific phrases that indicate the story topic
+  const specificPhrases = [
+    'jim cramer', 'cnbc', 'online used car', 'used car dealer',
+    'diabetes drug', 'weight loss', 'ozempic', 'wegovy',
+    'artificial intelligence', 'ai', 'machine learning',
+    'electric vehicle', 'ev', 'autonomous driving'
+  ];
+  
+  specificPhrases.forEach(phrase => {
+    if (cleanText.includes(phrase)) {
+      topics.push({ term: phrase, weight: 70, type: 'phrase' });
+    }
+  });
+  
+  // Government entities
+  const governmentTerms = ['u.s. government', 'u.k. government', 'federal government', 'biden administration'];
+  governmentTerms.forEach(term => {
+    if (cleanText.includes(term)) {
+      topics.push({ term, weight: 60, type: 'government' });
+    }
+  });
+  
+  // Action words that indicate what happened
+  const actionTerms = ['announced', 'reported', 'revealed', 'launched', 'acquired', 'merged', 'filed', 'sued'];
+  actionTerms.forEach(term => {
+    if (cleanText.includes(term)) {
+      topics.push({ term, weight: 40, type: 'action' });
+    }
+  });
+  
+  // Remove duplicates and return top topics
+  const uniqueTopics = topics.filter((topic, index, self) => 
+    index === self.findIndex(t => t.term === topic.term)
+  );
+  
+  return uniqueTopics.slice(0, 8); // Return top 8 topics
 }
 
 // Function to determine if a phrase should link to a topic page vs source URL

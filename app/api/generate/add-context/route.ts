@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { generateTopicUrl } from '../../../../lib/api';
+import { generateTopicUrl, MODEL_CONFIG } from '../../../../lib/api';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
@@ -45,7 +45,7 @@ Return only the topics as a comma-separated list, no explanations:`;
         
         if (cleanTopic.length < 3) continue;
 
-        const url = `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&items=10&fields=headline,title,created,body,url,channels&accept=application/json&displayOutput=full`;
+        const url = `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&items=20&fields=headline,title,created,body,url,channels&accept=application/json&displayOutput=full`;
         
         const res = await fetch(url, {
           headers: { Accept: 'application/json' },
@@ -83,7 +83,7 @@ Return only the topics as a comma-separated list, no explanations:`;
             const content = `${item.headline || ''} ${item.body || ''}`.toLowerCase();
             const headline = (item.headline || item.title || '').toLowerCase();
             
-            // More strict relevance checking - prefer exact topic matches or strong keyword matches
+            // Enhanced relevance checking with industry context
             const topicWords = cleanTopic.split(' ');
             
             // Check for exact topic match first
@@ -91,25 +91,67 @@ Return only the topics as a comma-separated list, no explanations:`;
               return true;
             }
             
-            // Check if at least 2 words from the topic appear in the headline or content
-            const matchingWords = topicWords.filter(word => 
-              word.length > 2 && (headline.includes(word) || content.includes(word))
-            );
+            // Enhanced relevance scoring with industry context
+            let relevanceScore = 0;
             
-            // Require at least 2 matching words for relevance
-            return matchingWords.length >= 2;
+            // Check for exact topic matches
+            if (content.includes(cleanTopic)) {
+              relevanceScore += 100;
+            }
+            
+            // Check for company-specific matches (higher weight for company names)
+            const companyTerms = ['novo nordisk', 'wegovy', 'ozempic', 'eli lilly', 'zepbound', 'mounjaro', 'pfizer', 'moderna', 'johnson & johnson', 'j&j'];
+            const foundCompany = companyTerms.find(term => content.includes(term) || headline.includes(term));
+            if (foundCompany) {
+              relevanceScore += 80;
+            }
+            
+            // Check for industry-specific terms (pharmaceutical, healthcare, etc.)
+            const industryTerms = ['pharmaceutical', 'biotech', 'healthcare', 'fda', 'clinical trial', 'drug', 'medication', 'treatment', 'therapy', 'obesity', 'diabetes', 'weight loss'];
+            const foundIndustry = industryTerms.find(term => content.includes(term) || headline.includes(term));
+            if (foundIndustry) {
+              relevanceScore += 40;
+            }
+            
+            // Check for word matches in headline and content
+            const headlineMatches = topicWords.filter(word => 
+              word.length > 2 && headline.includes(word)
+            ).length;
+            relevanceScore += headlineMatches * 15;
+            
+            const bodyMatches = topicWords.filter(word => 
+              word.length > 2 && content.includes(word)
+            ).length;
+            relevanceScore += bodyMatches * 5;
+            
+            // Require minimum relevance score
+            return relevanceScore >= 20;
           })
           .map((item: any) => {
             const content = `${item.headline || ''} ${item.body || ''}`.toLowerCase();
             const headline = (item.headline || item.title || '').toLowerCase();
             const topicWords = cleanTopic.split(' ');
             
-            // Calculate relevance score
+            // Calculate enhanced relevance score
             let score = 0;
             
             // Exact topic match gets highest score
             if (content.includes(cleanTopic)) {
               score += 100;
+            }
+            
+            // Company-specific matches get high priority
+            const companyTerms = ['novo nordisk', 'wegovy', 'ozempic', 'eli lilly', 'zepbound', 'mounjaro', 'pfizer', 'moderna', 'johnson & johnson', 'j&j'];
+            const foundCompany = companyTerms.find(term => content.includes(term) || headline.includes(term));
+            if (foundCompany) {
+              score += 80;
+            }
+            
+            // Industry-specific terms get medium priority
+            const industryTerms = ['pharmaceutical', 'biotech', 'healthcare', 'fda', 'clinical trial', 'drug', 'medication', 'treatment', 'therapy', 'obesity', 'diabetes', 'weight loss'];
+            const foundIndustry = industryTerms.find(term => content.includes(term) || headline.includes(term));
+            if (foundIndustry) {
+              score += 40;
             }
             
             // Headline matches get higher score than body matches
@@ -122,6 +164,13 @@ Return only the topics as a comma-separated list, no explanations:`;
               word.length > 2 && content.includes(word)
             ).length;
             score += bodyMatches * 5;
+            
+            // Penalize articles that seem unrelated to the industry
+            const unrelatedTerms = ['web3', 'crypto', 'blockchain', 'gaming', 'sports', 'entertainment', 'fashion', 'food', 'travel'];
+            const foundUnrelated = unrelatedTerms.find(term => content.includes(term) || headline.includes(term));
+            if (foundUnrelated) {
+              score -= 50; // Significant penalty for unrelated content
+            }
             
             return {
               headline: item.headline || item.title || '[No Headline]',
@@ -217,17 +266,6 @@ Write the 2 context paragraphs now:`;
       .replace(/\n([^<])/g, '\n\n$1') // Ensure paragraphs are separated by double line breaks
       .replace(/([^>])\n\n([^<])/g, '$1\n\n$2'); // Ensure proper spacing around HTML tags
 
-    // Insert context paragraphs above the price action line
-    let updatedArticle = currentArticle;
-    
-    // Split the article into lines to find the price action section
-    const lines = currentArticle.split('\n');
-    const priceActionIndex = lines.findIndex((line: string) => 
-      line.includes('Price Action:') || 
-      line.includes('<strong>') && line.includes('Price Action:') ||
-      line.includes('Price Action')
-    );
-    
     // Generate subhead first
     let contextSubhead = '';
     try {
@@ -278,6 +316,14 @@ Create 1 subhead for the context section:`;
 
     // Insert context and subhead together
     let updatedArticleWithSubheads = currentArticle;
+    // Split the article into lines to find the price action section
+    const lines = currentArticle.split('\n');
+    const priceActionIndex = lines.findIndex((line: string) => 
+      line.includes('Price Action:') || 
+      line.includes('<strong>') && line.includes('Price Action:') ||
+      line.includes('Price Action')
+    );
+    
     if (priceActionIndex !== -1) {
       // Insert context and subhead before the price action line
       const beforePriceAction = lines.slice(0, priceActionIndex).join('\n');
@@ -285,7 +331,7 @@ Create 1 subhead for the context section:`;
       const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
       
       // Check if there's a "Read Next" section before price action that needs to be moved
-      const readNextPattern = /<p>Read Next:[\s\S]*?<\/p>/;
+      const readNextPattern = /Read Next:[\s\S]*?(?=\n\n|$)/;
       const readNextMatch = beforePriceAction.match(readNextPattern);
       
       if (readNextMatch) {
@@ -299,7 +345,7 @@ Create 1 subhead for the context section:`;
       }
     } else {
       // If no price action found, check if there's a "Read Next" section at the end to move
-      const readNextPattern = /<p>Read Next:[\s\S]*?<\/p>/;
+      const readNextPattern = /Read Next:[\s\S]*?(?=\n\n|$)/;
       const readNextMatch = currentArticle.match(readNextPattern);
       
       if (readNextMatch) {
@@ -326,4 +372,4 @@ Create 1 subhead for the context section:`;
     console.error('Error adding context:', error);
     return NextResponse.json({ error: error.message || 'Failed to add context.' }, { status: 500 });
   }
-} 
+}

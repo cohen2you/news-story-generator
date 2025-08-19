@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import LocalDate from '../components/LocalDate';
 import AnalystNoteUpload from '../components/AnalystNoteUpload';
+import EnhancedContextForm from '../components/EnhancedContextForm';
+import EditorialReviewForm from '../components/EditorialReviewForm';
 
 export default function PRStoryGeneratorPage() {
   const [ticker, setTicker] = useState('');
@@ -51,6 +53,15 @@ export default function PRStoryGeneratorPage() {
   const [technicalContextError, setTechnicalContextError] = useState('');
   const [testTopicResult, setTestTopicResult] = useState<any>(null);
   const [testingTopic, setTestingTopic] = useState(false);
+  const [showContextSearch, setShowContextSearch] = useState(false);
+  const [contextSearchTerm, setContextSearchTerm] = useState('');
+  const [contextSearchResults, setContextSearchResults] = useState<any[]>([]);
+  const [selectedContextArticles, setSelectedContextArticles] = useState<any[]>([]);
+  const [isSearchingContext, setIsSearchingContext] = useState(false);
+  const [isAddingMultipleContext, setIsAddingMultipleContext] = useState(false);
+  const [showEditorialReview, setShowEditorialReview] = useState(false);
+  const [originalArticleBeforeReview, setOriginalArticleBeforeReview] = useState('');
+  const [editorialReviewCompleted, setEditorialReviewCompleted] = useState(false);
 
   // Client-only: Convert PR or Article HTML body to plain text when selected
   useEffect(() => {
@@ -78,6 +89,16 @@ export default function PRStoryGeneratorPage() {
   useEffect(() => {
     console.log('Source URL state:', sourceUrl); // Debug log for sourceUrl state
   }, [sourceUrl]);
+
+  useEffect(() => {
+    console.log('showEditorialReview state changed:', showEditorialReview);
+  }, [showEditorialReview]);
+
+  useEffect(() => {
+    console.log('originalArticleBeforeReview length:', originalArticleBeforeReview.length);
+    console.log('article length:', article.length);
+    console.log('Should show undo button:', originalArticleBeforeReview && originalArticleBeforeReview !== article);
+  }, [originalArticleBeforeReview, article]);
 
   // Fetch PRs for ticker
   const fetchPRs = async () => {
@@ -711,11 +732,16 @@ export default function PRStoryGeneratorPage() {
     setCopiedSubheads(false);
     setIncludeCTA(false);
     setIncludeSubheads(false);
-         setLoadingContext(false);
-     setContextError('');
-     setPreviouslyUsedContextUrls([]);
-     setLoadingTechnicalContext(false);
-     setTechnicalContextError('');
+    setLoadingContext(false);
+    setContextError('');
+    setPreviouslyUsedContextUrls([]);
+    setLoadingTechnicalContext(false);
+    setTechnicalContextError('');
+    setShowContextSearch(false);
+    setContextSearchTerm('');
+    setContextSearchResults([]);
+    setSelectedContextArticles([]);
+    setShowEditorialReview(false);
   };
 
   const handleAnalystNoteTextExtracted = (text: string, noteTicker: string) => {
@@ -932,6 +958,108 @@ export default function PRStoryGeneratorPage() {
     }
   };
 
+  // Enhanced context search functions
+  const handleContextSearchClick = () => {
+    setShowContextSearch(true);
+    setContextSearchResults([]);
+    setSelectedContextArticles([]);
+    setContextSearchTerm('');
+  };
+
+  const searchContextArticles = async () => {
+    if (!contextSearchTerm.trim()) {
+      setContextError('Please enter a search term');
+      return;
+    }
+
+    setIsSearchingContext(true);
+    setContextError('');
+    setContextSearchResults([]);
+    setSelectedContextArticles([]);
+
+    try {
+      const response = await fetch('/api/bz/search-articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ searchTerm: contextSearchTerm.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to search articles');
+      }
+
+      setContextSearchResults(data.articles || []);
+      
+      if (data.totalFound === 0) {
+        setContextError(`No articles found containing "${contextSearchTerm}"`);
+      }
+    } catch (error: any) {
+      setContextError(error.message || 'Failed to search articles');
+    } finally {
+      setIsSearchingContext(false);
+    }
+  };
+
+  const toggleContextArticleSelection = (article: any) => {
+    setSelectedContextArticles(prev => {
+      const isSelected = prev.some(a => a.url === article.url);
+      if (isSelected) {
+        return prev.filter(a => a.url !== article.url);
+      } else {
+        if (prev.length >= 3) {
+          setContextError('Maximum 3 articles can be selected');
+          return prev;
+        }
+        return [...prev, article];
+      }
+    });
+  };
+
+  const addMultipleContextToArticle = async () => {
+    if (selectedContextArticles.length === 0) {
+      setContextError('Please select at least one article');
+      return;
+    }
+
+    setIsAddingMultipleContext(true);
+
+    try {
+      const response = await fetch('/api/generate/add-multiple-context', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentArticle: article,
+          selectedArticles: selectedContextArticles,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add context');
+      }
+
+      setArticle(data.updatedArticle);
+      
+      // Reset form
+      setShowContextSearch(false);
+      setContextSearchTerm('');
+      setContextSearchResults([]);
+      setSelectedContextArticles([]);
+      setContextError('');
+    } catch (error: any) {
+      setContextError(error.message || 'Failed to add context');
+    } finally {
+      setIsAddingMultipleContext(false);
+    }
+  };
+
   return (
     <div style={{ maxWidth: 700, margin: 'auto', padding: 20, fontFamily: 'Arial, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -1084,55 +1212,276 @@ export default function PRStoryGeneratorPage() {
              {genError && <div style={{ color: 'red', marginBottom: 10 }}>{genError}</div>}
        {contextError && <div style={{ color: 'red', marginBottom: 10 }}>{contextError}</div>}
        {technicalContextError && <div style={{ color: 'red', marginBottom: 10 }}>{technicalContextError}</div>}
-      {article && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <h2>Generated Article</h2>
-                         <div style={{ display: 'flex', gap: 10 }}>
-               <button
-                 onClick={addContext}
-                 disabled={loadingContext}
-                 style={{ 
-                   padding: '8px 16px', 
-                   background: loadingContext ? '#6b7280' : '#dc2626', 
-                   color: 'white', 
-                   border: 'none', 
-                   borderRadius: 4,
-                   fontSize: 14,
-                   cursor: loadingContext ? 'not-allowed' : 'pointer'
-                 }}
-               >
-                 {loadingContext ? 'Adding Benzinga Context...' : 'Add Benzinga Context'}
-               </button>
-               <button
-                 onClick={addTechnicalContext}
-                 disabled={loadingTechnicalContext}
-                 style={{ 
-                   padding: '8px 16px', 
-                   background: loadingTechnicalContext ? '#6b7280' : '#059669', 
-                   color: 'white', 
-                   border: 'none', 
-                   borderRadius: 4,
-                   fontSize: 14,
-                   cursor: loadingTechnicalContext ? 'not-allowed' : 'pointer'
-                 }}
-               >
-                 {loadingTechnicalContext ? 'Adding Technical Context...' : 'Add Technical Context'}
-               </button>
-               <button
-                 onClick={handleCopyArticle}
-                 style={{ 
-                   padding: '8px 16px', 
-                   background: copied ? '#059669' : '#2563eb', 
-                   color: 'white', 
-                   border: 'none', 
-                   borderRadius: 4,
-                   fontSize: 14
-                 }}
-               >
-                 {copied ? 'Copied!' : 'Copy Article'}
-               </button>
+             {article && (
+         <div style={{ marginBottom: 20 }}>
+           {/* Enhanced Context Search Interface - Moved above article */}
+           {showContextSearch && (
+             <div style={{ 
+               marginBottom: 20, 
+               padding: 16, 
+               border: '1px solid #e5e7eb', 
+               borderRadius: 8, 
+               backgroundColor: '#f9fafb' 
+             }}>
+               <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 18, fontWeight: 'bold' }}>
+                 Search for Benzinga Articles
+               </h3>
+               
+               <div style={{ marginBottom: 16 }}>
+                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                   <input
+                     type="text"
+                     value={contextSearchTerm}
+                     onChange={(e) => setContextSearchTerm(e.target.value)}
+                     placeholder="e.g., 'Wegovy', 'Novo Nordisk', 'weight loss drugs', 'FDA approval'..."
+                     style={{ 
+                       flex: 1, 
+                       padding: '8px 12px', 
+                       border: '1px solid #d1d5db', 
+                       borderRadius: 4,
+                       fontSize: 14
+                     }}
+                     onKeyPress={(e) => e.key === 'Enter' && searchContextArticles()}
+                   />
+                   <button
+                     onClick={searchContextArticles}
+                     disabled={isSearchingContext}
+                     style={{ 
+                       padding: '8px 16px', 
+                       background: isSearchingContext ? '#6b7280' : '#2563eb', 
+                       color: 'white', 
+                       border: 'none', 
+                       borderRadius: 4,
+                       fontSize: 14,
+                       cursor: isSearchingContext ? 'not-allowed' : 'pointer'
+                     }}
+                   >
+                     {isSearchingContext ? 'Searching...' : 'Search'}
+                   </button>
+                   <button
+                     onClick={() => setShowContextSearch(false)}
+                     style={{ 
+                       padding: '8px 16px', 
+                       background: '#6b7280', 
+                       color: 'white', 
+                       border: 'none', 
+                       borderRadius: 4,
+                       fontSize: 14,
+                       cursor: 'pointer'
+                     }}
+                   >
+                     Cancel
+                   </button>
+                 </div>
+               </div>
+
+               {contextSearchResults.length > 0 && (
+                 <div style={{ marginBottom: 16 }}>
+                   <h4 style={{ marginBottom: 12, fontSize: 16, fontWeight: 'bold' }}>
+                     Found {contextSearchResults.length} articles (select up to 3):
+                   </h4>
+                   
+                   <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 16 }}>
+                     {contextSearchResults.map((article, index) => {
+                       const isSelected = selectedContextArticles.some(a => a.url === article.url);
+                       return (
+                         <div
+                           key={article.url}
+                           style={{
+                             border: isSelected ? '2px solid #2563eb' : '1px solid #d1d5db',
+                             borderRadius: 6,
+                             padding: 12,
+                             marginBottom: 8,
+                             cursor: 'pointer',
+                             backgroundColor: isSelected ? '#eff6ff' : 'white',
+                             transition: 'all 0.2s'
+                           }}
+                           onClick={() => toggleContextArticleSelection(article)}
+                         >
+                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                             <input
+                               type="checkbox"
+                               checked={isSelected}
+                               onChange={() => toggleContextArticleSelection(article)}
+                               style={{ marginTop: 2 }}
+                             />
+                             <div style={{ flex: 1 }}>
+                               <h5 style={{ 
+                                 margin: '0 0 8px 0', 
+                                 fontSize: 14, 
+                                 fontWeight: 'bold',
+                                 color: '#1f2937'
+                               }}>
+                                 {article.headline}
+                               </h5>
+                               <p style={{ 
+                                 margin: '0 0 8px 0', 
+                                 fontSize: 12, 
+                                 color: '#6b7280',
+                                 lineHeight: 1.4
+                               }}>
+                                 {article.body.substring(0, 120)}...
+                               </p>
+                               <div style={{ 
+                                 display: 'flex', 
+                                 justifyContent: 'space-between', 
+                                 alignItems: 'center',
+                                 fontSize: 11,
+                                 color: '#9ca3af'
+                               }}>
+                                 <span>
+                                   {new Date(article.created).toLocaleDateString('en-US', {
+                                     month: 'short',
+                                     day: 'numeric',
+                                     hour: '2-digit',
+                                     minute: '2-digit',
+                                   })}
+                                 </span>
+                                 <span>Relevance: {article.relevanceScore}</span>
+                               </div>
+                             </div>
+                           </div>
+                         </div>
+                       );
+                     })}
+                   </div>
+                 </div>
+               )}
+
+               {selectedContextArticles.length > 0 && (
+                 <div style={{ marginBottom: 16 }}>
+                   <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 'bold' }}>
+                     Selected Articles ({selectedContextArticles.length}/3):
+                   </h4>
+                   <div style={{ marginBottom: 16 }}>
+                     {selectedContextArticles.map((article) => (
+                       <div key={article.url} style={{ 
+                         fontSize: 13, 
+                         color: '#6b7280', 
+                         backgroundColor: '#f3f4f6', 
+                         padding: 8, 
+                         borderRadius: 4,
+                         marginBottom: 4
+                       }}>
+                         {article.headline}
+                       </div>
+                     ))}
+                   </div>
+                   
+                   <button
+                     onClick={addMultipleContextToArticle}
+                     disabled={isAddingMultipleContext}
+                     style={{ 
+                       width: '100%',
+                       padding: '12px 16px', 
+                       background: isAddingMultipleContext ? '#6b7280' : '#059669', 
+                       color: 'white', 
+                       border: 'none', 
+                       borderRadius: 4,
+                       fontSize: 14,
+                       cursor: isAddingMultipleContext ? 'not-allowed' : 'pointer'
+                     }}
+                   >
+                     {isAddingMultipleContext ? 'Adding Context...' : `Add ${selectedContextArticles.length} Article${selectedContextArticles.length > 1 ? 's' : ''} as Context`}
+                   </button>
+                 </div>
+               )}
              </div>
+           )}
+
+           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+             <h2>Generated Article</h2>
+                          <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={handleContextSearchClick}
+                  disabled={loadingContext}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: loadingContext ? '#6b7280' : '#dc2626', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: 4,
+                    fontSize: 14,
+                    cursor: loadingContext ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Add Benzinga Context
+                </button>
+                <button
+                  onClick={addTechnicalContext}
+                  disabled={loadingTechnicalContext}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: loadingTechnicalContext ? '#6b7280' : '#059669', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: 4,
+                    fontSize: 14,
+                    cursor: loadingTechnicalContext ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {loadingTechnicalContext ? 'Adding Technical Context...' : 'Add Technical Context'}
+                </button>
+                                 <button
+                   onClick={() => {
+                     console.log('Editorial Review button clicked');
+                     setOriginalArticleBeforeReview(article);
+                     setShowEditorialReview(true);
+                     // Scroll to the editorial review form
+                     setTimeout(() => {
+                       const editorialForm = document.querySelector('[data-editorial-review]');
+                       if (editorialForm) {
+                         editorialForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                       }
+                     }, 100);
+                   }}
+                   style={{ 
+                     padding: '8px 16px', 
+                     background: '#8b5cf6', 
+                     color: 'white', 
+                     border: 'none', 
+                     borderRadius: 4,
+                     fontSize: 14,
+                     cursor: 'pointer'
+                   }}
+                                   >
+                    Editorial Review
+                  </button>
+                  {/* Debug: originalArticleBeforeReview exists: {originalArticleBeforeReview ? 'YES' : 'NO'}, lengths: {originalArticleBeforeReview?.length} vs {article?.length} */}
+                  {((originalArticleBeforeReview && originalArticleBeforeReview.trim() !== article.trim()) || editorialReviewCompleted) && (
+                    <button
+                      onClick={() => {
+                        setArticle(originalArticleBeforeReview);
+                        setOriginalArticleBeforeReview('');
+                        setEditorialReviewCompleted(false);
+                      }}
+                      style={{ 
+                        padding: '8px 16px', 
+                        background: '#dc2626', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: 4,
+                        fontSize: 14,
+                        cursor: 'pointer'
+                      }}
+                                          >
+                        Undo Edit
+                      </button>
+                  )}
+                  <button
+                    onClick={handleCopyArticle}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: copied ? '#059669' : '#2563eb', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: 4,
+                    fontSize: 14
+                  }}
+                >
+                  {copied ? 'Copied!' : 'Copy Article'}
+                </button>
+              </div>
           </div>
           <div
             ref={articleRef}
@@ -1157,9 +1506,26 @@ export default function PRStoryGeneratorPage() {
                 ` : ''
               ) 
             }}
-          />
-        </div>
-      )}
+                      />
+          </div>
+        )}
+
+        {/* Editorial Review Form */}
+        {showEditorialReview && (
+          <div style={{ marginBottom: 20 }} data-editorial-review>
+            <EditorialReviewForm
+              article={originalArticleBeforeReview || article}
+              sourceText={primaryText}
+              onComplete={(reviewedArticle) => {
+                setArticle(reviewedArticle);
+                setShowEditorialReview(false);
+                setEditorialReviewCompleted(true);
+                // Keep the originalArticleBeforeReview state so the Undo Edit button appears
+              }}
+              onBack={() => setShowEditorialReview(false)}
+            />
+          </div>
+        )}
       
       {/* Topic URL Test Results */}
       {testTopicResult && (
