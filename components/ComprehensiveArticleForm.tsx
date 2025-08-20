@@ -127,7 +127,7 @@ While Trump announced on July 14 that he would sign off on "severe tariffs" agai
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Comprehensive Financial Article Generator</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Benzinga Article Generator</h2>
         <button
           onClick={handleClearAll}
           className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"

@@ -1397,7 +1397,7 @@ export default function PRStoryGeneratorPage() {
   return (
     <div style={{ maxWidth: 700, margin: 'auto', padding: 20, fontFamily: 'Arial, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-      <h1>Comprehensive Financial Article Generator</h1>
+              <h1>Benzinga Article Generator</h1>
         <button
           onClick={handleClearAll}
           style={{ padding: '6px 12px', background: '#b91c1c', color: 'white', border: 'none', borderRadius: 4 }}

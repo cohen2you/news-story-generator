@@ -8,7 +8,7 @@ export default function ComprehensiveArticlePage() {
       <div className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Comprehensive Financial Article Generator
+            Benzinga Article Generator
           </h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
             Transform any news source into a comprehensive financial news article with market context, 
