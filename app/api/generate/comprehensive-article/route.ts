@@ -270,7 +270,7 @@ function buildComprehensivePrompt(
   
   const tickerContext = userTicker ? `\nUSER REQUESTED TICKER: ${userTicker} - Include this ticker as a central focus if relevant to the story.` : '\nNO SPECIFIC TICKER: Focus on the news story and use SPY for any market references.';
   
-  const hyperlinkRule = sourceUrl ? `\nMANDATORY HYPERLINK RULE: You MUST include exactly one hyperlink in the lead paragraph. Wrap exactly three consecutive words in <a href="${sourceUrl}"> and </a> tags. Choose any three consecutive words that fit naturally.` : '';
+  const hyperlinkRule = sourceUrl ? `\nNOTE: Hyperlinks will be added separately using the "Add Lead Hyperlink" feature for better control and relevance.` : '';
   
   const ctaSection = includeCTA && ctaText ? `\n- CTA Integration: After the lead paragraph, insert the following CTA exactly as provided:\n  ${ctaText}` : '';
   

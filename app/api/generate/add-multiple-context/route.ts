@@ -39,7 +39,7 @@ Requirements:
 1. Create 1-2 paragraphs that provide additional context
 2. Make the content relevant to the current article's topic
 3. Keep each paragraph to EXACTLY 2 sentences maximum - no more, no less
-4. You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this exact format: <a href="${article.url}">[three word phrase]</a>
+4. You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this exact format: <a href="${article.url}">three word phrase</a>
 5. Any additional paragraphs should have NO hyperlinks
 6. Make the content flow naturally with the current article
 7. Focus on providing valuable context that enhances the reader's understanding
@@ -49,11 +49,16 @@ Requirements:
 11. Choose relevant three-word phrases within the sentences to hyperlink, such as company names, key terms, or action phrases
 12. CRITICAL: ONLY the first paragraph should contain exactly one hyperlink in the format specified above
 13. Do NOT reference "a recent article" or similar phrases - just embed the hyperlink naturally in the existing sentence structure
-14. Ensure proper spacing between paragraphs - add double line breaks between paragraphs
-15. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
+14. CRITICAL: Format the output with proper HTML paragraph tags. Each paragraph should be wrapped in <p> tags.
+15. CRITICAL: Ensure no paragraph has more than 2 sentences - break longer paragraphs into smaller ones
+16. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
     * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "<strong>Bill Ackman</strong>" or "<strong>Warren Buffett</strong>")
     * Second and subsequent references: Use only the last name without bolding (e.g., "Ackman" or "Buffett")
     * This applies to all people mentioned in the context paragraphs
+
+Example format:
+<p>First paragraph with hyperlink <a href="url">three word phrase</a> and second sentence.</p>
+<p>Second paragraph with no hyperlinks and second sentence.</p>
 
 Write the context paragraphs now:`;
 
@@ -67,11 +72,13 @@ Write the context paragraphs now:`;
         const contextText = completion.choices[0].message?.content?.trim() || '';
         
         if (contextText) {
-          // Ensure proper spacing between paragraphs
+          // Ensure proper HTML paragraph formatting
           const formattedContext = contextText
             .replace(/\n\n+/g, '\n\n') // Normalize multiple line breaks to double
             .replace(/\n([^<])/g, '\n\n$1') // Ensure paragraphs are separated by double line breaks
-            .replace(/([^>])\n\n([^<])/g, '$1\n\n$2'); // Ensure proper spacing around HTML tags
+            .replace(/([^>])\n\n([^<])/g, '$1\n\n$2') // Ensure proper spacing around HTML tags
+            .replace(/<p>\s*<\/p>/g, '') // Remove empty paragraphs
+            .replace(/(<p>.*?<\/p>)\s*(<p>.*?<\/p>)/g, '$1\n\n$2'); // Ensure proper spacing between <p> tags
           
           contextParagraphs.push(formattedContext);
           contextSources.push({

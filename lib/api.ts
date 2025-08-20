@@ -114,28 +114,49 @@ export async function generateTopicUrl(topic: string, leadParagraph?: string): P
       return 'https://www.benzinga.com/news';
     }
     
-    // Try to find relevant articles using the Benzinga News API
+    // Try to find relevant articles using the Benzinga News API with proper search
     const searchTerm = terms.slice(0, 3).join(' '); // Use up to 3 terms
-    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=20&fields=headline,title,url,channels,body&displayOutput=full`;
     
+    // Use the correct Benzinga API parameters for search
+    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&topics=${encodeURIComponent(searchTerm)}&items=100&fields=headline,title,url,channels,body&displayOutput=full`;
+    
+    let data;
     const res = await fetch(url, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       }
     });
+    
     if (!res.ok) {
       console.error('Benzinga API error:', res.status, res.statusText);
-      return 'https://www.benzinga.com/news';
-    }
-    
-    let data;
-    try {
-      const responseText = await res.text();
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('Error parsing Benzinga API response:', parseError);
-      return 'https://www.benzinga.com/news';
+      // Try fallback to general search if topics search fails
+      const fallbackUrl = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=100&fields=headline,title,url,channels,body&displayOutput=full`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!fallbackRes.ok) {
+        return 'https://www.benzinga.com/news';
+      }
+      
+      const fallbackData = await fallbackRes.json();
+      if (!Array.isArray(fallbackData) || fallbackData.length === 0) {
+        return 'https://www.benzinga.com/news';
+      }
+      
+      data = fallbackData;
+    } else {
+      try {
+        const responseText = await res.text();
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error parsing Benzinga API response:', parseError);
+        return 'https://www.benzinga.com/news';
+      }
     }
     
     if (!Array.isArray(data) || data.length === 0) {
@@ -271,9 +292,10 @@ async function generateContextualTopicUrl(topic: string, leadParagraph: string):
     const keyTopics = extractKeyTopicsFromLead(leadParagraph);
     console.log('Extracted key topics from lead paragraph:', keyTopics);
     
-    // Get Benzinga articles
-    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=30&fields=headline,title,url,channels,body&displayOutput=full`;
+    // Get Benzinga articles using proper search
+    const url = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&topics=${encodeURIComponent(topic)}&items=100&fields=headline,title,url,channels,body&displayOutput=full`;
     
+    let data;
     const res = await fetch(url, {
       headers: {
         'Accept': 'application/json',
@@ -283,16 +305,33 @@ async function generateContextualTopicUrl(topic: string, leadParagraph: string):
     
     if (!res.ok) {
       console.error('Benzinga API error:', res.status, res.statusText);
-      return 'https://www.benzinga.com/news';
-    }
-    
-    let data;
-    try {
-      const responseText = await res.text();
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('Error parsing Benzinga API response:', parseError);
-      return 'https://www.benzinga.com/news';
+      // Try fallback to general search if topics search fails
+      const fallbackUrl = `https://api.benzinga.com/api/v2/news?token=${process.env.BENZINGA_API_KEY}&items=100&fields=headline,title,url,channels,body&displayOutput=full`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!fallbackRes.ok) {
+        return 'https://www.benzinga.com/news';
+      }
+      
+      const fallbackData = await fallbackRes.json();
+      if (!Array.isArray(fallbackData) || fallbackData.length === 0) {
+        return 'https://www.benzinga.com/news';
+      }
+      
+      data = fallbackData;
+    } else {
+      try {
+        const responseText = await res.text();
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error parsing Benzinga API response:', parseError);
+        return 'https://www.benzinga.com/news';
+      }
     }
     
     if (!Array.isArray(data) || data.length === 0) {

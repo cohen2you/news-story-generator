@@ -235,7 +235,6 @@ ${analystInfo}
 CRITICAL FORMATTING RULES:
 - NO paragraph should be longer than 2 sentences
 - Break up any long paragraphs into multiple shorter ones
-- The hyperlink MUST appear in the lead paragraph
 - Use HTML tags for formatting, not markdown
 
 Structure your article as follows:
@@ -245,15 +244,7 @@ Structure your article as follows:
 
 - Lead paragraph: Start with the most important news event or development from the source text. Focus on what happened, not on stock price movement. Use the full company name and ticker in this format: <strong>Company Name</strong> (NYSE: TICKER) if a specific company is involved, or focus on the news event itself if it's broader market news. The company name should be bolded using HTML <strong> tags. Do not use markdown bold (**) or asterisks elsewhere. State what happened and why it matters. CRITICAL: Do NOT include analyst names (like "Samik Chatterjee" or "J.P. Morgan analyst") in the lead paragraph. The lead should focus on the news event itself, not specific analyst details or stock price movements. 
 
-MANDATORY HYPERLINK RULE: If sourceUrl is provided and not empty, you MUST include exactly one hyperlink in the lead paragraph. Wrap exactly three consecutive words in <a href="${sourceUrl}"> and </a> tags. Choose any three consecutive words that fit naturally. If sourceUrl is empty, do not include any hyperlinks. 
-
-IMPORTANT: When choosing which three words to hyperlink, prefer phrases that represent topics or concepts (like "Berkshire's warning", "tariff impacts", "earnings decline") rather than just company names or basic facts. This allows for better topic-based linking to relevant Benzinga content.
-
-EXAMPLE: "Federal Reserve Governor Adriana Kugler <a href="${sourceUrl}">announced her resignation</a> on Saturday, creating a vacancy on the Federal Reserve Board."
-
-DEBUG INFO: sourceUrl = "${sourceUrl}"
-
-REMEMBER: The hyperlink in the lead paragraph is MANDATORY and NOT optional.
+NOTE: Hyperlinks will be added separately using the "Add Lead Hyperlink" feature for better control and relevance.
 
 CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have more information, create additional paragraphs.
 
@@ -267,7 +258,7 @@ CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have mo
 
 - Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. When referencing the source material, if a specific date is available, mention it (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If no specific date is available, use "recently" or "today" as appropriate. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
 
-CRITICAL SOURCE ATTRIBUTION RULE: You MUST include a source attribution in the second paragraph (immediately after the lead paragraph). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name:', outletName, 'for URL:', sourceUrl); return `The second paragraph MUST begin with: "${outletName} <a href="${sourceUrl}">reports</a>."`; })() : 'The second paragraph MUST begin with: "The company reports."'}
+CRITICAL SOURCE ATTRIBUTION RULE: You MUST include a source attribution in the second paragraph (immediately after the lead paragraph). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name:', outletName, 'for URL:', sourceUrl); return `The second paragraph MUST begin with: "${outletName} <a href="${sourceUrl}">reports</a>" - you MUST include the complete HTML hyperlink format exactly as shown, but do NOT add a period after the hyperlink. Continue the sentence naturally after the hyperlink.`; })() : 'The second paragraph MUST begin with: "The company reports."'}
 
 CRITICAL: Each paragraph must be no longer than 2 sentences. If you have more information, create additional paragraphs.
 
@@ -315,8 +306,9 @@ ${ticker && ticker.trim() !== '' ? `- At the very bottom, include the following 
 ${priceSummary}` : ''}
 
 ${relatedArticles && relatedArticles.length > 0 ? `
-- After the price action, add a "Read Next:" section with the following format:
-  Read Next: <a href="${relatedArticles[1]?.url || relatedArticles[0].url}">${relatedArticles[1]?.headline || relatedArticles[0].headline}</a>
+- After the price action, add a "Read Next:" section in its own separate paragraph with the following format:
+  <p>Read Next: <a href="${relatedArticles[1]?.url || relatedArticles[0].url}">${relatedArticles[1]?.headline || relatedArticles[0].headline}</a></p>
+  CRITICAL: The "Read Next" section MUST be in its own paragraph, separate from the main article content.
 ` : ''}
 
 WRITING STYLE: Write in a direct, conversational tone that sounds natural and engaging. Avoid overly formal or AI-like language such as "garnered attention," "expressed a favorable outlook," or "emphasized that." Instead, use simple, clear language that flows naturally.
@@ -327,7 +319,7 @@ Examples of what to avoid:
 - "emphasized that" → "noted" or "said"
 - "encounter volatility" → "face ups and downs" or "see price swings"
 
-CRITICAL: You MUST include exactly one hyperlink in the lead paragraph using the format <a href="${sourceUrl}">[three consecutive words]</a>. This is NOT optional - every lead paragraph must have this hyperlink.
+NOTE: Hyperlinks will be added separately using the "Add Lead Hyperlink" feature for better control and relevance.
 
 Keep the tone neutral and informative, suitable for a financial news audience. Do not include speculation or personal opinion. 
 
@@ -400,156 +392,8 @@ export async function POST(req: Request) {
     console.log('Generated story preview:', story.substring(0, 500));
     console.log('Source URL provided:', sourceUrl);
     
-    // Post-process the story to replace topic-based hyperlinks with appropriate Benzinga URLs
-    if (sourceUrl) {
-      console.log('Processing lead paragraph hyperlink...');
-      // Find the lead paragraph hyperlink and always try to make it topic-based
-      const leadParagraphMatch = story.match(/<p>([^<]*<a href="[^"]*">([^<]+)<\/a>[^<]*)<\/p>/);
-      if (leadParagraphMatch) {
-        const linkedPhrase = leadParagraphMatch[2];
-        console.log('Found linked phrase in lead:', linkedPhrase);
-        // Always try to generate a topic URL for lead paragraph hyperlinks
-        try {
-          // Find the first paragraph (lead paragraph) and extract the actual hyperlink text
-          const paragraphs = story.split('</p>');
-          if (paragraphs.length > 0) {
-            const leadParagraph = paragraphs[0];
-            const hyperlinkMatch = leadParagraph.match(/<a href="[^"]*">([^<]+)<\/a>/);
-            
-            if (hyperlinkMatch) {
-              const actualLinkText = hyperlinkMatch[1];
-              console.log('Found actual hyperlink text in lead:', actualLinkText);
-              
-              // Generate topic URL using the actual hyperlink text and lead paragraph context
-              const topicUrl = await generateTopicUrl(actualLinkText, leadParagraph);
-              console.log('Generated topic URL for lead paragraph:', topicUrl);
-              
-              // Replace any hyperlink in the lead paragraph with the topic URL
-              const updatedLeadParagraph = leadParagraph.replace(
-                /<a href="[^"]*">([^<]+)<\/a>/,
-                `<a href="${topicUrl}">$1</a>`
-              );
-              
-              if (updatedLeadParagraph !== leadParagraph) {
-                paragraphs[0] = updatedLeadParagraph;
-                story = paragraphs.join('</p>');
-                console.log('Successfully replaced lead paragraph hyperlink with topic URL');
-              } else {
-                console.log('No hyperlink found to replace in lead paragraph');
-              }
-            } else {
-              console.log('No hyperlink found in lead paragraph - adding one');
-              // Add a hyperlink to the lead paragraph if one is missing
-              const words = leadParagraph.replace(/<[^>]*>/g, '').split(/\s+/);
-              let hyperlinkAdded = false;
-              
-              for (let i = 0; i < words.length - 2; i++) {
-                const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
-                // Skip if the phrase contains HTML tags, is too generic, or is incomplete
-                if (!phrase.includes('<') && !phrase.includes('>') && 
-                    !phrase.includes('(') && !phrase.includes(')') && // Skip phrases with parentheses
-                    !phrase.includes(':') && // Skip phrases with colons
-                    !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i].toLowerCase()) &&
-                    !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 1].toLowerCase()) &&
-                    !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 2].toLowerCase()) &&
-                    words[i].length > 2 && words[i + 1].length > 2 && words[i + 2].length > 2) { // Ensure all words are substantial
-                  
-                  // Always try to generate a topic URL for lead paragraph hyperlinks
-                  let targetUrl = sourceUrl;
-                  try {
-                    const topicUrl = await generateTopicUrl(phrase, leadParagraph);
-                    targetUrl = topicUrl;
-                    console.log('Generated topic URL for fallback hyperlink:', topicUrl);
-                  } catch (error) {
-                    console.error('Error generating topic URL for fallback hyperlink:', error);
-                    // Only fallback to source URL if topic URL generation completely fails
-                    targetUrl = sourceUrl;
-                  }
-                  
-                  // Create the hyperlinked version
-                  const hyperlinkedPhrase = `<a href="${targetUrl}">${phrase}</a>`;
-                  const updatedLeadParagraph = leadParagraph.replace(phrase, hyperlinkedPhrase);
-                  paragraphs[0] = updatedLeadParagraph;
-                  story = paragraphs.join('</p>');
-                  console.log('Added hyperlink to lead paragraph:', phrase, '->', targetUrl);
-                  hyperlinkAdded = true;
-                  break;
-                }
-              }
-              
-              if (!hyperlinkAdded) {
-                console.log('Could not find suitable phrase for hyperlink in lead paragraph');
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error generating topic URL for lead paragraph:', error);
-          // Keep the original hyperlink if topic URL generation fails
-        }
-      } else {
-        console.log('No lead paragraph hyperlink found - adding one');
-        // Add a hyperlink to the lead paragraph if one is missing
-        const paragraphs = story.split('</p>');
-        if (paragraphs.length > 0) {
-          const leadParagraph = paragraphs[0];
-          // Find a suitable phrase to hyperlink (3 consecutive words)
-          const words = leadParagraph.replace(/<[^>]*>/g, '').split(/\s+/);
-          let hyperlinkAdded = false;
-          
-          for (let i = 0; i < words.length - 2; i++) {
-            const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
-            // Skip if the phrase contains HTML tags or is too generic
-            if (!phrase.includes('<') && !phrase.includes('>') && 
-                !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i].toLowerCase()) &&
-                !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 1].toLowerCase()) &&
-                !['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(words[i + 2].toLowerCase())) {
-              
-              // Always try to generate a topic URL for lead paragraph hyperlinks
-              let targetUrl = sourceUrl;
-              try {
-                // Extract key topics from the lead paragraph for better search
-                const keyTopics = extractKeyTopics(leadParagraph);
-                console.log('Extracted key topics from lead:', keyTopics);
-                
-                // Try each key topic to find the most relevant article
-                for (const topic of keyTopics) {
-                  const topicUrl = await generateTopicUrl(topic, leadParagraph);
-                  if (topicUrl && topicUrl !== 'https://www.benzinga.com/news') {
-                    targetUrl = topicUrl;
-                    console.log('Generated topic URL for fallback hyperlink:', topicUrl, 'using topic:', topic);
-                    break;
-                  }
-                }
-                
-                // If no relevant topic found, try the original phrase
-                if (targetUrl === sourceUrl) {
-                  const topicUrl = await generateTopicUrl(phrase, leadParagraph);
-                  targetUrl = topicUrl;
-                  console.log('Generated topic URL using original phrase:', topicUrl);
-                }
-              } catch (error) {
-                console.error('Error generating topic URL for fallback hyperlink:', error);
-                // Only fallback to source URL if topic URL generation completely fails
-                targetUrl = sourceUrl;
-              }
-              
-              // Create the hyperlinked version
-              const hyperlinkedPhrase = `<a href="${targetUrl}">${phrase}</a>`;
-              const updatedLeadParagraph = leadParagraph.replace(phrase, hyperlinkedPhrase);
-              paragraphs[0] = updatedLeadParagraph;
-              story = paragraphs.join('</p>');
-              console.log('Added hyperlink to lead paragraph:', phrase, '->', targetUrl);
-              hyperlinkAdded = true;
-              break;
-            }
-          }
-          
-          if (!hyperlinkAdded) {
-            console.log('Could not find suitable phrase for hyperlink in lead paragraph');
-          }
-        }
-      }
-    }
+    // Note: Hyperlinks are now handled separately via the "Add Lead Hyperlink" feature
+    // This allows for better control and more relevant hyperlink selection
     
     // Fix any blank URLs in source attribution
     console.log('Processing source attribution...');
@@ -568,7 +412,14 @@ export async function POST(req: Request) {
       // Also check if "reports" exists but isn't hyperlinked and add hyperlink
       if (story.includes('reports') && !story.includes(`href="${sourceUrl}">reports</a>`)) {
         console.log('Adding missing hyperlink to reports');
-        story = story.replace(/(\w+)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
+        // Look for patterns like "CNBC reports." or "The company reports." and add hyperlink
+        // Make sure the period comes after the hyperlink, not inside it
+        story = story.replace(/([A-Z][a-z]+)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
+        story = story.replace(/(The company)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
+        
+        // Also handle cases where "reports" appears without a period at the end of a sentence
+        story = story.replace(/([A-Z][a-z]+)\s+reports\s+/g, `$1 <a href="${sourceUrl}">reports</a> `);
+        story = story.replace(/(The company)\s+reports\s+/g, `$1 <a href="${sourceUrl}">reports</a> `);
       }
       
       // CRITICAL: If no source attribution exists at all, add it after the lead paragraph
@@ -625,6 +476,18 @@ export async function POST(req: Request) {
         }
       } else {
         console.log('"Read Next" section already exists');
+        
+        // Fix any inline "Read Next" sections that might be embedded in paragraphs
+        // Look for patterns like "Read Next: <a href="...">...</a>" that are not in their own paragraph
+        const inlineReadNextPattern = /([^>])\s*Read Next:\s*<a href="([^"]+)">([^<]+)<\/a>/g;
+        if (inlineReadNextPattern.test(story)) {
+          console.log('Found inline "Read Next" section - fixing...');
+          story = story.replace(inlineReadNextPattern, (match: string, beforeText: string, url: string, headline: string) => {
+            // Remove the inline "Read Next" and add it as a separate paragraph
+            const readNextSection = `<p>Read Next: <a href="${url}">${headline}</a></p>`;
+            return `${beforeText.trim()}\n\n${readNextSection}`;
+          });
+        }
       }
     } else {
       console.log('No related articles available');

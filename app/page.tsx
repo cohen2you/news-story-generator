@@ -6,6 +6,8 @@ import AnalystNoteUpload from '../components/AnalystNoteUpload';
 import EnhancedContextForm from '../components/EnhancedContextForm';
 import EditorialReviewForm from '../components/EditorialReviewForm';
 
+
+
 export default function PRStoryGeneratorPage() {
   const [ticker, setTicker] = useState('');
   const [prs, setPRs] = useState<any[]>([]);
@@ -62,6 +64,17 @@ export default function PRStoryGeneratorPage() {
   const [showEditorialReview, setShowEditorialReview] = useState(false);
   const [originalArticleBeforeReview, setOriginalArticleBeforeReview] = useState('');
   const [editorialReviewCompleted, setEditorialReviewCompleted] = useState(false);
+  const [leadHyperlinkArticleIndex, setLeadHyperlinkArticleIndex] = useState(0);
+  const [addingLeadHyperlink, setAddingLeadHyperlink] = useState(false);
+  const [showLeadHyperlinkSearch, setShowLeadHyperlinkSearch] = useState(false);
+  const [leadHyperlinkSearchTerm, setLeadHyperlinkSearchTerm] = useState('');
+  const [leadHyperlinkSearchResults, setLeadHyperlinkSearchResults] = useState<any[]>([]);
+  const [selectedLeadHyperlinkArticle, setSelectedLeadHyperlinkArticle] = useState<any | null>(null);
+  const [isSearchingLeadHyperlink, setIsSearchingLeadHyperlink] = useState(false);
+  const [editorialReviewChanges, setEditorialReviewChanges] = useState<string[]>([]);
+  const [editorialReviewStats, setEditorialReviewStats] = useState({ originalWordCount: 0, newWordCount: 0 });
+
+
 
   // Client-only: Convert PR or Article HTML body to plain text when selected
   useEffect(() => {
@@ -94,11 +107,17 @@ export default function PRStoryGeneratorPage() {
     console.log('showEditorialReview state changed:', showEditorialReview);
   }, [showEditorialReview]);
 
+
+
   useEffect(() => {
     console.log('originalArticleBeforeReview length:', originalArticleBeforeReview.length);
     console.log('article length:', article.length);
     console.log('Should show undo button:', originalArticleBeforeReview && originalArticleBeforeReview !== article);
   }, [originalArticleBeforeReview, article]);
+
+  useEffect(() => {
+    console.log('showLeadHyperlinkSearch state changed:', showLeadHyperlinkSearch);
+  }, [showLeadHyperlinkSearch]);
 
   // Fetch PRs for ticker
   const fetchPRs = async () => {
@@ -452,8 +471,10 @@ export default function PRStoryGeneratorPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.story) throw new Error(data.error || 'Failed to generate story');
-      setArticle(data.story);
-      setPreviouslyUsedContextUrls([]); // Clear previously used context URLs when generating new article
+             setArticle(data.story);
+       setPreviouslyUsedContextUrls([]); // Clear previously used context URLs when generating new article
+       setLeadHyperlinkArticleIndex(0); // Reset hyperlink article index for new article
+       setAddingLeadHyperlink(false); // Reset loading state
     } catch (err: any) {
       setGenError(err.message || 'Failed to generate story');
     } finally {
@@ -958,6 +979,319 @@ export default function PRStoryGeneratorPage() {
     }
   };
 
+  const handleLeadHyperlinkSearchClick = () => {
+    console.log('Lead hyperlink search button clicked');
+    setShowLeadHyperlinkSearch(true);
+    setLeadHyperlinkSearchResults([]);
+    setSelectedLeadHyperlinkArticle(null);
+    setLeadHyperlinkSearchTerm('');
+    console.log('showLeadHyperlinkSearch set to true');
+  };
+
+  const searchLeadHyperlinkArticles = async () => {
+    if (!leadHyperlinkSearchTerm.trim()) {
+      setContextError('Please enter a search term');
+      return;
+    }
+
+    setIsSearchingLeadHyperlink(true);
+    setContextError('');
+    setLeadHyperlinkSearchResults([]);
+    setSelectedLeadHyperlinkArticle(null);
+
+    try {
+      const response = await fetch('/api/bz/search-articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ searchTerm: leadHyperlinkSearchTerm.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to search articles');
+      }
+
+      setLeadHyperlinkSearchResults(data.articles || []);
+      
+      if (data.totalFound === 0) {
+        setContextError(`No articles found containing "${leadHyperlinkSearchTerm}"`);
+      }
+    } catch (error: any) {
+      setContextError(error.message || 'Failed to search articles');
+    } finally {
+      setIsSearchingLeadHyperlink(false);
+    }
+  };
+
+  const selectLeadHyperlinkArticle = (article: any) => {
+    setSelectedLeadHyperlinkArticle(article);
+  };
+
+  const applyLeadHyperlink = async () => {
+    if (!selectedLeadHyperlinkArticle) {
+      setContextError('Please select an article first');
+      return;
+    }
+
+    setAddingLeadHyperlink(true);
+
+    try {
+      // Extract the first paragraph (lead paragraph) from the article
+      const paragraphs = article.split('</p>');
+      
+      if (paragraphs.length > 0) {
+        const leadParagraph = paragraphs[0].replace('<p>', '').trim();
+        
+        // Find the best 3-word phrase to hyperlink (avoiding company names and first words)
+        const selectedPhrase = findBestPhraseForHyperlink(leadParagraph);
+        console.log('Selected phrase for hyperlink:', selectedPhrase);
+        console.log('Selected article URL:', selectedLeadHyperlinkArticle.url);
+        
+        if (selectedPhrase) {
+          // First, remove any existing hyperlink from the lead paragraph
+          let cleanParagraph = leadParagraph.replace(/<a[^>]*>([^<]*)<\/a>/g, '$1');
+          console.log('Clean paragraph:', cleanParagraph);
+          
+          // Find the phrase in the cleaned paragraph and replace it with a hyperlink
+          const escapedPhrase = selectedPhrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const phraseRegex = new RegExp(`\\b${escapedPhrase}\\b`, 'i');
+          console.log('Phrase regex:', phraseRegex);
+          console.log('Regex test result:', phraseRegex.test(cleanParagraph));
+          
+          if (phraseRegex.test(cleanParagraph)) {
+            const hyperlinkedParagraph = cleanParagraph.replace(
+              phraseRegex,
+              `<a href="${selectedLeadHyperlinkArticle.url}" target="_blank" rel="noopener noreferrer">${selectedPhrase}</a>`
+            );
+            console.log('Hyperlinked paragraph:', hyperlinkedParagraph);
+            
+            // Replace the first paragraph with the hyperlinked version
+            paragraphs[0] = `<p>${hyperlinkedParagraph}`;
+            const updatedArticle = paragraphs.join('</p>');
+            console.log('Updated article preview:', updatedArticle.substring(0, 200));
+            setArticle(updatedArticle);
+          } else {
+            // If the first attempt fails, try without word boundaries (for phrases with punctuation)
+            console.log('Trying without word boundaries...');
+            const simpleRegex = new RegExp(escapedPhrase, 'i');
+            console.log('Simple regex:', simpleRegex);
+            console.log('Simple regex test result:', simpleRegex.test(cleanParagraph));
+            
+            if (simpleRegex.test(cleanParagraph)) {
+              const hyperlinkedParagraph = cleanParagraph.replace(
+                simpleRegex,
+                `<a href="${selectedLeadHyperlinkArticle.url}" target="_blank" rel="noopener noreferrer">${selectedPhrase}</a>`
+              );
+              console.log('Hyperlinked paragraph (simple):', hyperlinkedParagraph);
+              
+              // Replace the first paragraph with the hyperlinked version
+              paragraphs[0] = `<p>${hyperlinkedParagraph}`;
+              const updatedArticle = paragraphs.join('</p>');
+              console.log('Updated article preview:', updatedArticle.substring(0, 200));
+              setArticle(updatedArticle);
+            } else {
+              console.log('Phrase not found in paragraph even with simple regex');
+            }
+          }
+        } else {
+          console.log('No phrase selected for hyperlink');
+        }
+      }
+
+      // Reset the search interface
+      setShowLeadHyperlinkSearch(false);
+      setLeadHyperlinkSearchTerm('');
+      setLeadHyperlinkSearchResults([]);
+      setSelectedLeadHyperlinkArticle(null);
+      setContextError('');
+    } catch (error) {
+      console.error('Error adding lead hyperlink:', error);
+      setContextError('Failed to add lead hyperlink');
+    } finally {
+      setAddingLeadHyperlink(false);
+    }
+  };
+
+  // New function to find the best phrase for hyperlinking
+  const findBestPhraseForHyperlink = (leadParagraph: string): string => {
+    const cleanText = leadParagraph.replace(/<[^>]*>/g, '').toLowerCase();
+    const words = cleanText.split(/\s+/);
+    console.log('Lead paragraph words:', words);
+    console.log('Number of words:', words.length);
+    
+    if (words.length < 3) return '';
+    
+    // Company names to avoid (case insensitive)
+    const companyNames = [
+      'hertz global holdings', 'hertz global', 'hertz holdings', 'hertz',
+      'apple inc', 'apple',
+      'tesla inc', 'tesla',
+      'amazon.com', 'amazon',
+      'microsoft corporation', 'microsoft',
+      'carvana co', 'carvana',
+      'novo nordisk', 'novo',
+      'palo alto networks', 'palo alto',
+      'general motors', 'ford motor', 'ford',
+      'donald trump', 'trump', 'joe biden', 'biden',
+      'lisa cook', 'cook', 'bill pulte', 'pulte',
+      'federal reserve', 'federal housing finance agency', 'fhfa'
+    ];
+    
+    // Function to check if a phrase contains a company name
+    const containsCompanyName = (phrase: string): boolean => {
+      return companyNames.some(name => phrase.toLowerCase().includes(name.toLowerCase()));
+    };
+    
+    // Priority 1: Last 3 words (if not a company name)
+    if (words.length >= 3) {
+      const lastThreeWords = `${words[words.length - 3]} ${words[words.length - 2]} ${words[words.length - 1]}`;
+      console.log('Checking last 3 words:', lastThreeWords);
+      if (!containsCompanyName(lastThreeWords)) {
+        console.log('Using last 3 words (Priority 1)');
+        return lastThreeWords;
+      } else {
+        console.log('Last 3 words contain company name, skipping');
+      }
+    }
+    
+    // Priority 2: Middle of paragraph (avoid first 3 words and company names)
+    const middleStart = Math.max(3, Math.floor(words.length * 0.3)); // Start at 30% into the paragraph
+    const middleEnd = Math.min(words.length - 3, Math.floor(words.length * 0.7)); // End at 70% into the paragraph
+    
+    for (let i = middleStart; i <= middleEnd - 2; i++) {
+      const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+      if (!containsCompanyName(phrase)) {
+        return phrase;
+      }
+    }
+    
+    // Priority 3: Any 3 words that don't contain company names (avoiding first 3)
+    for (let i = 3; i <= words.length - 3; i++) {
+      const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+      if (!containsCompanyName(phrase)) {
+        return phrase;
+      }
+    }
+    
+    // Fallback: Last 3 words even if it contains company name
+    if (words.length >= 3) {
+      return `${words[words.length - 3]} ${words[words.length - 2]} ${words[words.length - 1]}`;
+    }
+    
+    // Final fallback: First 3 words
+    return `${words[0]} ${words[1]} ${words[2]}`;
+  };
+
+  // Helper function to extract key topics from lead paragraph
+  const extractKeyTopicsFromLead = (leadParagraph: string): Array<{term: string, weight: number, type: string}> => {
+    const cleanText = leadParagraph.replace(/<[^>]*>/g, '').toLowerCase();
+    const topics: Array<{term: string, weight: number, type: string}> = [];
+    
+    // Political figures and public officials (highest priority)
+    const politicalFigures = [
+      'donald trump', 'trump', 'joe biden', 'biden', 'kamala harris', 'harris',
+      'jerome powell', 'powell', 'lisa cook', 'cook', 'bill pulte', 'pulte'
+    ];
+    
+    politicalFigures.forEach(figure => {
+      if (cleanText.includes(figure)) {
+        topics.push({ term: figure, weight: 100, type: 'political' });
+      }
+    });
+    
+    // Government agencies and institutions (high priority)
+    const governmentAgencies = [
+      'federal reserve', 'federal housing finance agency', 'fhfa', 'federal reserve governor',
+      'white house', 'congress', 'senate', 'house of representatives',
+      'sec', 'federal trade commission', 'ftc', 'department of justice', 'doj'
+    ];
+    
+    governmentAgencies.forEach(agency => {
+      if (cleanText.includes(agency)) {
+        topics.push({ term: agency, weight: 95, type: 'government' });
+      }
+    });
+    
+    // Financial and legal terms (high priority)
+    const financialTerms = [
+      'mortgage fraud', 'bank documents', 'loan terms', 'resignation', 'allegations',
+      'earnings', 'revenue', 'profit', 'analyst', 'rating', 'price target',
+      'stock', 'market', 'trading', 'investor', 'investment',
+      'government', 'policy', 'regulation', 'legal', 'court', 'lawsuit'
+    ];
+    
+    financialTerms.forEach(term => {
+      if (cleanText.includes(term)) {
+        topics.push({ term, weight: 85, type: 'financial' });
+      }
+    });
+    
+    // Company names and tickers (high priority)
+    const companyPatterns = [
+      /apple\s+inc/i,
+      /tesla\s+inc/i,
+      /amazon\.com/i,
+      /microsoft\s+corporation/i,
+      /carvana\s+co/i,
+      /novo\s+nordisk/i,
+      /palo\s+alto\s+networks/i,
+      /hertz\s+global/i,
+      /general\s+motors/i,
+      /ford\s+motor/i
+    ];
+    
+    companyPatterns.forEach(pattern => {
+      const match = cleanText.match(pattern);
+      if (match) {
+        topics.push({ term: match[0], weight: 80, type: 'company' });
+      }
+    });
+    
+    // Ticker symbols
+    const tickerMatch = cleanText.match(/nasdaq:\s*([a-z]+)/i);
+    if (tickerMatch) {
+      topics.push({ term: tickerMatch[1].toUpperCase(), weight: 75, type: 'ticker' });
+    }
+    
+    // Specific phrases that indicate the story topic
+    const specificPhrases = [
+      'jim cramer', 'cnbc', 'online used car', 'used car dealer',
+      'diabetes drug', 'weight loss', 'ozempic', 'wegovy',
+      'artificial intelligence', 'ai', 'machine learning',
+      'electric vehicle', 'ev', 'autonomous driving',
+      'rental car', 'car rental', 'fleet management'
+    ];
+    
+    specificPhrases.forEach(phrase => {
+      if (cleanText.includes(phrase)) {
+        topics.push({ term: phrase, weight: 70, type: 'phrase' });
+      }
+    });
+    
+    // Action words that indicate what happened
+    const actionTerms = [
+      'announced', 'reported', 'revealed', 'launched', 'acquired', 'merged', 'filed', 'sued',
+      'demanded', 'resignation', 'allegations', 'falsified', 'secured', 'prompting', 'call for'
+    ];
+    actionTerms.forEach(term => {
+      if (cleanText.includes(term)) {
+        topics.push({ term, weight: 60, type: 'action' });
+      }
+    });
+    
+    // Remove duplicates and return top topics
+    const uniqueTopics = topics.filter((topic, index, self) => 
+      index === self.findIndex(t => t.term === topic.term)
+    );
+    
+    return uniqueTopics.slice(0, 8); // Return top 8 topics
+  };
+
+
+
   // Enhanced context search functions
   const handleContextSearchClick = () => {
     setShowContextSearch(true);
@@ -1286,7 +1620,7 @@ export default function PRStoryGeneratorPage() {
                        const isSelected = selectedContextArticles.some(a => a.url === article.url);
                        return (
                          <div
-                           key={article.url}
+                           key={`${article.url}-${index}`}
                            style={{
                              border: isSelected ? '2px solid #2563eb' : '1px solid #d1d5db',
                              borderRadius: 6,
@@ -1354,8 +1688,8 @@ export default function PRStoryGeneratorPage() {
                      Selected Articles ({selectedContextArticles.length}/3):
                    </h4>
                    <div style={{ marginBottom: 16 }}>
-                     {selectedContextArticles.map((article) => (
-                       <div key={article.url} style={{ 
+                     {selectedContextArticles.map((article, index) => (
+                       <div key={`${article.url}-${index}`} style={{ 
                          fontSize: 13, 
                          color: '#6b7280', 
                          backgroundColor: '#f3f4f6', 
@@ -1386,140 +1720,287 @@ export default function PRStoryGeneratorPage() {
                    </button>
                  </div>
                )}
-             </div>
-           )}
+                           </div>
+            )}
 
-           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-             <h2>Generated Article</h2>
-                          <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={handleContextSearchClick}
-                  disabled={loadingContext}
-                  style={{ 
-                    padding: '8px 16px', 
-                    background: loadingContext ? '#6b7280' : '#dc2626', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: 4,
-                    fontSize: 14,
-                    cursor: loadingContext ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Add Benzinga Context
-                </button>
-                <button
-                  onClick={addTechnicalContext}
-                  disabled={loadingTechnicalContext}
-                  style={{ 
-                    padding: '8px 16px', 
-                    background: loadingTechnicalContext ? '#6b7280' : '#059669', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: 4,
-                    fontSize: 14,
-                    cursor: loadingTechnicalContext ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {loadingTechnicalContext ? 'Adding Technical Context...' : 'Add Technical Context'}
-                </button>
-                                 <button
-                   onClick={() => {
-                     console.log('Editorial Review button clicked');
-                     setOriginalArticleBeforeReview(article);
-                     setShowEditorialReview(true);
-                     // Scroll to the editorial review form
-                     setTimeout(() => {
-                       const editorialForm = document.querySelector('[data-editorial-review]');
-                       if (editorialForm) {
-                         editorialForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                       }
-                     }, 100);
-                   }}
-                   style={{ 
-                     padding: '8px 16px', 
-                     background: '#8b5cf6', 
-                     color: 'white', 
-                     border: 'none', 
-                     borderRadius: 4,
-                     fontSize: 14,
-                     cursor: 'pointer'
-                   }}
-                                   >
-                    Editorial Review
-                  </button>
-                  {/* Debug: originalArticleBeforeReview exists: {originalArticleBeforeReview ? 'YES' : 'NO'}, lengths: {originalArticleBeforeReview?.length} vs {article?.length} */}
-                  {((originalArticleBeforeReview && originalArticleBeforeReview.trim() !== article.trim()) || editorialReviewCompleted) && (
-                    <button
-                      onClick={() => {
-                        setArticle(originalArticleBeforeReview);
-                        setOriginalArticleBeforeReview('');
-                        setEditorialReviewCompleted(false);
+            {/* Lead Hyperlink Search Interface */}
+            {showLeadHyperlinkSearch && (
+              <div style={{ 
+                marginBottom: 20, 
+                padding: 16, 
+                border: '1px solid #e5e7eb', 
+                borderRadius: 8, 
+                backgroundColor: '#f9fafb' 
+              }}>
+                <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 18, fontWeight: 'bold' }}>
+                  Search for Lead Hyperlink Article
+                </h3>
+                
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <input
+                      type="text"
+                      value={leadHyperlinkSearchTerm}
+                      onChange={(e) => setLeadHyperlinkSearchTerm(e.target.value)}
+                      placeholder="e.g., 'Donald Trump', 'Federal Reserve', 'Lisa Cook', 'mortgage fraud'..."
+                      style={{ 
+                        flex: 1, 
+                        padding: '8px 12px', 
+                        border: '1px solid #d1d5db', 
+                        borderRadius: 4,
+                        fontSize: 14
                       }}
+                      onKeyPress={(e) => e.key === 'Enter' && searchLeadHyperlinkArticles()}
+                    />
+                    <button
+                      onClick={searchLeadHyperlinkArticles}
+                      disabled={isSearchingLeadHyperlink}
                       style={{ 
                         padding: '8px 16px', 
-                        background: '#dc2626', 
+                        background: isSearchingLeadHyperlink ? '#6b7280' : '#7c3aed', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: 4,
+                        fontSize: 14,
+                        cursor: isSearchingLeadHyperlink ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {isSearchingLeadHyperlink ? 'Searching...' : 'Search'}
+                    </button>
+                    <button
+                      onClick={() => setShowLeadHyperlinkSearch(false)}
+                      style={{ 
+                        padding: '8px 16px', 
+                        background: '#6b7280', 
                         color: 'white', 
                         border: 'none', 
                         borderRadius: 4,
                         fontSize: 14,
                         cursor: 'pointer'
                       }}
-                                          >
-                        Undo Edit
-                      </button>
-                  )}
-                  <button
-                    onClick={handleCopyArticle}
-                  style={{ 
-                    padding: '8px 16px', 
-                    background: copied ? '#059669' : '#2563eb', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: 4,
-                    fontSize: 14,
-                    marginRight: 8
-                  }}
-                >
-                  {copied ? 'Copied!' : 'Copy Article'}
-                </button>
-                <button
-                  onClick={() => {
-                    // Convert HTML to plain text with proper paragraph breaks
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = article;
-                    const plainText = tempDiv.textContent || tempDiv.innerText || '';
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+                {leadHyperlinkSearchResults.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ marginBottom: 12, fontSize: 16, fontWeight: 'bold' }}>
+                      Found {leadHyperlinkSearchResults.length} articles (select one):
+                    </h4>
                     
-                    // Add double line breaks between paragraphs for better formatting
-                    const formattedText = plainText
-                      .replace(/\n\s*\n/g, '\n\n') // Normalize paragraph breaks
-                      .replace(/\n/g, '\n\n'); // Add extra line breaks for better separation
+                    <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 16 }}>
+                      {leadHyperlinkSearchResults.map((article, index) => {
+                        const isSelected = selectedLeadHyperlinkArticle?.url === article.url;
+                        return (
+                          <div
+                            key={`${article.url}-${index}`}
+                            style={{
+                              border: isSelected ? '2px solid #7c3aed' : '1px solid #d1d5db',
+                              borderRadius: 6,
+                              padding: 12,
+                              marginBottom: 8,
+                              cursor: 'pointer',
+                              backgroundColor: isSelected ? '#f3f4f6' : 'white',
+                              transition: 'all 0.2s'
+                            }}
+                            onClick={() => selectLeadHyperlinkArticle(article)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                              <input
+                                type="radio"
+                                checked={isSelected}
+                                onChange={() => selectLeadHyperlinkArticle(article)}
+                                style={{ marginTop: 2 }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <h5 style={{ 
+                                  margin: '0 0 8px 0', 
+                                  fontSize: 14, 
+                                  fontWeight: 'bold',
+                                  color: '#1f2937'
+                                }}>
+                                  {article.headline}
+                                </h5>
+                                <p style={{ 
+                                  margin: '0 0 8px 0', 
+                                  fontSize: 12, 
+                                  color: '#6b7280',
+                                  lineHeight: 1.4
+                                }}>
+                                  {article.body.substring(0, 120)}...
+                                </p>
+                                <div style={{ 
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  alignItems: 'center',
+                                  fontSize: 11,
+                                  color: '#9ca3af'
+                                }}>
+                                  <span>
+                                    {new Date(article.created).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </span>
+                                  <span>Relevance: {article.relevanceScore}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {selectedLeadHyperlinkArticle && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 'bold' }}>
+                      Selected Article:
+                    </h4>
+                    <div style={{ 
+                      fontSize: 13, 
+                      color: '#6b7280', 
+                      backgroundColor: '#f3f4f6', 
+                      padding: 8, 
+                      borderRadius: 4,
+                      marginBottom: 8
+                    }}>
+                      {selectedLeadHyperlinkArticle.headline}
+                    </div>
                     
-                    navigator.clipboard.writeText(formattedText).then(() => {
-                      alert('Article copied as plain text with paragraph breaks!');
-                    }).catch(() => {
-                      // Fallback for older browsers
-                      const textArea = document.createElement('textarea');
-                      textArea.value = formattedText;
-                      document.body.appendChild(textArea);
-                      textArea.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(textArea);
-                      alert('Article copied as plain text with paragraph breaks!');
-                    });
-                  }}
-                  style={{ 
-                    padding: '8px 16px', 
-                    background: '#059669', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: 4,
-                    fontSize: 14
-                  }}
-                >
-                  Copy as Plain Text
-                </button>
+                    <button
+                      onClick={applyLeadHyperlink}
+                      disabled={addingLeadHyperlink}
+                      style={{ 
+                        width: '100%',
+                        padding: '12px 16px', 
+                        background: addingLeadHyperlink ? '#6b7280' : '#7c3aed', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: 4,
+                        fontSize: 14,
+                        cursor: addingLeadHyperlink ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {addingLeadHyperlink ? 'Adding Hyperlink...' : 'Apply Lead Hyperlink'}
+                    </button>
+                  </div>
+                )}
               </div>
-          </div>
+            )}
+
+                         <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 10, gap: 10 }}>
+                 <button
+                   onClick={handleLeadHyperlinkSearchClick}
+                   disabled={!article || article.trim() === ''}
+                   style={{ 
+                     padding: '8px 16px', 
+                     background: '#7c3aed', 
+                     color: 'white', 
+                     border: 'none', 
+                     borderRadius: 4,
+                     fontSize: 14,
+                     cursor: (article && article.trim() !== '') ? 'pointer' : 'not-allowed',
+                     opacity: (article && article.trim() !== '') ? 1 : 0.5
+                   }}
+                 >
+                   Add Lead Hyperlink
+                 </button>
+                 <button
+                   onClick={handleContextSearchClick}
+                   disabled={loadingContext}
+                   style={{ 
+                     padding: '8px 16px', 
+                     background: loadingContext ? '#6b7280' : '#dc2626', 
+                     color: 'white', 
+                     border: 'none', 
+                     borderRadius: 4,
+                     fontSize: 14,
+                     cursor: loadingContext ? 'not-allowed' : 'pointer'
+                   }}
+                 >
+                   Add Benzinga Context
+                 </button>
+                 <button
+                   onClick={addTechnicalContext}
+                   disabled={loadingTechnicalContext}
+                   style={{ 
+                     padding: '8px 16px', 
+                     background: loadingTechnicalContext ? '#6b7280' : '#059669', 
+                     color: 'white', 
+                     border: 'none', 
+                     borderRadius: 4,
+                     fontSize: 14,
+                     cursor: loadingTechnicalContext ? 'not-allowed' : 'pointer'
+                   }}
+                 >
+                   {loadingTechnicalContext ? 'Adding Technical Context...' : 'Add Technical Context'}
+                 </button>
+                                  <button
+                    onClick={() => {
+                      console.log('Editorial Review button clicked');
+                      setOriginalArticleBeforeReview(article);
+                      setShowEditorialReview(true);
+                      // Scroll to the editorial review form
+                      setTimeout(() => {
+                        const editorialForm = document.querySelector('[data-editorial-review]');
+                        if (editorialForm) {
+                          editorialForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }, 100);
+                    }}
+                    style={{ 
+                      padding: '8px 16px', 
+                      background: '#8b5cf6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: 4,
+                      fontSize: 14,
+                      cursor: 'pointer'
+                    }}
+                                    >
+                     Editorial Review
+                   </button>
+                   {/* Debug: originalArticleBeforeReview exists: {originalArticleBeforeReview ? 'YES' : 'NO'}, lengths: {originalArticleBeforeReview?.length} vs {article?.length} */}
+                   {((originalArticleBeforeReview && originalArticleBeforeReview.trim() !== article.trim()) || editorialReviewCompleted) && (
+                     <button
+                       onClick={() => {
+                         setArticle(originalArticleBeforeReview);
+                         setOriginalArticleBeforeReview('');
+                         setEditorialReviewCompleted(false);
+                       }}
+                       style={{ 
+                         padding: '8px 16px', 
+                         background: '#dc2626', 
+                         color: 'white', 
+                         border: 'none', 
+                         borderRadius: 4,
+                         fontSize: 14,
+                         cursor: 'pointer'
+                       }}
+                                           >
+                         Undo Edit
+                       </button>
+                   )}
+                                    <button
+                    onClick={handleCopyArticle}
+                    style={{ 
+                      padding: '8px 16px', 
+                      background: copied ? '#059669' : '#2563eb', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: 4,
+                      fontSize: 14
+                    }}
+                  >
+                    {copied ? 'Copied!' : 'Copy Article'}
+                  </button>
+               </div>
           <div
             ref={articleRef}
             style={{
@@ -1547,15 +2028,175 @@ export default function PRStoryGeneratorPage() {
           </div>
         )}
 
+        {/* Editorial Review Changes Summary */}
+        {editorialReviewCompleted && editorialReviewChanges.length > 0 && (
+          <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+            <div style={{ 
+              backgroundColor: '#fef3c7', 
+              border: '1px solid #f59e0b', 
+              borderRadius: '8px', 
+              padding: '20px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+            }}>
+              <h3 style={{ 
+                fontWeight: '600', 
+                fontSize: '18px', 
+                color: '#92400e', 
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <span style={{ 
+                  backgroundColor: '#f59e0b', 
+                  color: 'white', 
+                  borderRadius: '50%', 
+                  width: '24px', 
+                  height: '24px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  fontSize: '14px', 
+                  fontWeight: 'bold',
+                  marginRight: '12px'
+                }}>
+                  ✓
+                </span>
+                Editorial Review Changes Made
+              </h3>
+              
+              <div style={{ 
+                backgroundColor: '#fef3c7', 
+                border: '1px solid #f59e0b', 
+                borderRadius: '6px', 
+                padding: '16px', 
+                marginBottom: '16px' 
+              }}>
+                <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '12px' }}>
+                  <div style={{ marginBottom: '4px' }}>Original: {editorialReviewStats.originalWordCount} words</div>
+                  <div style={{ marginBottom: '4px' }}>New: {editorialReviewStats.newWordCount} words</div>
+                  <div style={{ fontWeight: '600' }}>Reduction: {editorialReviewStats.originalWordCount - editorialReviewStats.newWordCount} words</div>
+                </div>
+              </div>
+
+              <div>
+                <h4 style={{ 
+                  fontWeight: '600', 
+                  fontSize: '16px', 
+                  color: '#92400e', 
+                  marginBottom: '12px' 
+                }}>
+                  Changes Applied:
+                </h4>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {editorialReviewChanges.map((change, index) => (
+                    <li key={index} style={{ 
+                      display: 'flex', 
+                      alignItems: 'flex-start', 
+                      marginBottom: '10px',
+                      padding: '8px 12px',
+                      backgroundColor: 'white',
+                      borderRadius: '4px',
+                      border: '1px solid #fbbf24'
+                    }}>
+                      <span style={{ 
+                        color: '#d97706', 
+                        marginRight: '10px', 
+                        fontSize: '16px', 
+                        fontWeight: 'bold',
+                        flexShrink: 0
+                      }}>•</span>
+                      <span style={{ 
+                        color: '#78350f', 
+                        fontSize: '14px', 
+                        lineHeight: '1.4' 
+                      }}>{change}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Editorial Review No Changes Summary */}
+        {editorialReviewCompleted && editorialReviewChanges.length === 0 && (
+          <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+            <div style={{ 
+              backgroundColor: '#f0fdf4', 
+              border: '1px solid #bbf7d0', 
+              borderRadius: '8px', 
+              padding: '20px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+            }}>
+              <h3 style={{ 
+                fontWeight: '600', 
+                fontSize: '18px', 
+                color: '#166534', 
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <span style={{ 
+                  backgroundColor: '#22c55e', 
+                  color: 'white', 
+                  borderRadius: '50%', 
+                  width: '24px', 
+                  height: '24px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  fontSize: '14px', 
+                  fontWeight: 'bold',
+                  marginRight: '12px'
+                }}>
+                  ✓
+                </span>
+                Editorial Review Complete
+              </h3>
+              
+              <div style={{ 
+                backgroundColor: '#f0fdf4', 
+                border: '1px solid #bbf7d0', 
+                borderRadius: '6px', 
+                padding: '16px' 
+              }}>
+                <div style={{ fontSize: '14px', color: '#15803d', marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '4px' }}>Original: {editorialReviewStats.originalWordCount} words</div>
+                  <div style={{ marginBottom: '4px' }}>New: {editorialReviewStats.newWordCount} words</div>
+                  <div style={{ fontWeight: '600' }}>Reduction: {editorialReviewStats.originalWordCount - editorialReviewStats.newWordCount} words</div>
+                </div>
+                <div style={{ 
+                  color: '#15803d', 
+                  fontSize: '14px', 
+                  fontStyle: 'italic',
+                  marginTop: '8px'
+                }}>
+                  No significant changes were made during the editorial review. The article was already well-optimized.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Editorial Review Form */}
         {showEditorialReview && (
           <div style={{ marginBottom: 20 }} data-editorial-review>
             <EditorialReviewForm
               article={originalArticleBeforeReview || article}
               sourceText={primaryText}
-              onComplete={(reviewedArticle) => {
+              onComplete={(reviewedArticle, changes, stats) => {
                 setArticle(reviewedArticle);
+                setEditorialReviewChanges(changes || []);
+                setEditorialReviewStats(stats || { originalWordCount: 0, newWordCount: 0 });
                 setShowEditorialReview(false);
+     setShowLeadHyperlinkSearch(false);
+     setLeadHyperlinkSearchTerm('');
+     setLeadHyperlinkSearchResults([]);
+     setSelectedLeadHyperlinkArticle(null);
+     setShowLeadHyperlinkSearch(false);
+     setLeadHyperlinkSearchTerm('');
+     setLeadHyperlinkSearchResults([]);
+     setSelectedLeadHyperlinkArticle(null);
                 setEditorialReviewCompleted(true);
                 // Keep the originalArticleBeforeReview state so the Undo Edit button appears
               }}
@@ -1563,6 +2204,8 @@ export default function PRStoryGeneratorPage() {
             />
           </div>
         )}
+
+        
       
       {/* Topic URL Test Results */}
       {testTopicResult && (

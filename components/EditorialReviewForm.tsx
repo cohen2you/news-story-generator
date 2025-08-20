@@ -5,7 +5,7 @@ import { useState } from 'react';
 interface EditorialReviewFormProps {
   article: string;
   sourceText: string;
-  onComplete: (reviewedArticle: string) => void;
+  onComplete: (reviewedArticle: string, changes?: string[], stats?: { originalWordCount: number; newWordCount: number }) => void;
   onBack: () => void;
 }
 
@@ -50,7 +50,7 @@ export default function EditorialReviewForm({
       setOriginalWordCount(data.originalWordCount);
       setNewWordCount(data.newWordCount);
       setReviewCompleted(true);
-      onComplete(data.reviewedArticle);
+      onComplete(data.reviewedArticle, data.changes, { originalWordCount: data.originalWordCount, newWordCount: data.newWordCount });
     } catch (err: any) {
       setError(err.message || 'Error performing editorial review.');
     } finally {
@@ -139,50 +139,34 @@ export default function EditorialReviewForm({
 
       {reviewCompleted && (
         <div style={{ marginTop: '24px' }}>
-          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-            <h3 style={{ fontWeight: '600', color: '#166534', marginBottom: '8px' }}>Review Complete!</h3>
-            <div style={{ fontSize: '14px', color: '#15803d' }}>
-              <div>Original: {originalWordCount} words</div>
-              <div>New: {newWordCount} words (Target: &lt;600)</div>
-              <div>Reduction: {originalWordCount - newWordCount} words</div>
+          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
+            <h3 style={{ fontWeight: '600', color: '#166534', marginBottom: '12px', fontSize: '20px' }}>Editorial Review Complete</h3>
+            <div style={{ fontSize: '14px', color: '#15803d', marginBottom: '16px' }}>
+              <div style={{ marginBottom: '4px' }}>Original: {originalWordCount} words</div>
+              <div style={{ marginBottom: '4px' }}>New: {newWordCount} words (Target: &lt;600)</div>
+              <div style={{ fontWeight: '600' }}>Reduction: {originalWordCount - newWordCount} words</div>
             </div>
           </div>
 
-          {changes.length > 0 && (
-            <div style={{ marginBottom: '24px' }}>
-              <h3 style={{ fontWeight: '600', fontSize: '18px', color: '#1f2937', marginBottom: '12px' }}>Changes Made:</h3>
+          <div style={{ backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
+            <h3 style={{ fontWeight: '600', fontSize: '18px', color: '#92400e', marginBottom: '16px' }}>Changes Made During Editorial Review:</h3>
+            {changes.length > 0 ? (
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {changes.map((change, index) => (
-                  <li key={index} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <span style={{ color: '#2563eb', marginRight: '8px' }}>•</span>
-                    <span style={{ color: '#374151' }}>{change}</span>
+                  <li key={index} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    <span style={{ color: '#d97706', marginRight: '12px', fontSize: '16px', fontWeight: 'bold' }}>•</span>
+                    <span style={{ color: '#78350f', fontSize: '15px', lineHeight: '1.4' }}>{change}</span>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', fontWeight: '600', fontSize: '20px', color: '#1f2937', marginBottom: '16px' }}>
-              Reviewed Article
-            </label>
-            <div
-              style={{ 
-                width: '100%', 
-                borderRadius: '8px', 
-                border: '2px solid #d1d5db', 
-                padding: '16px 24px', 
-                fontSize: '18px', 
-                fontFamily: 'monospace', 
-                backgroundColor: '#f9fafb', 
-                maxHeight: '384px', 
-                overflowY: 'auto' 
-              }}
-              dangerouslySetInnerHTML={{ __html: reviewedArticle }}
-            />
+            ) : (
+              <div style={{ color: '#92400e', fontSize: '15px', fontStyle: 'italic' }}>
+                No significant changes were made during the editorial review. The article was already well-optimized.
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button
               type="button"
               onClick={handleUndoChanges}
@@ -200,6 +184,10 @@ export default function EditorialReviewForm({
             >
               Undo Editorial Changes
             </button>
+
+            <div style={{ fontSize: '14px', color: '#6b7280', fontStyle: 'italic' }}>
+              Article has been updated with editorial improvements
+            </div>
           </div>
         </div>
       )}

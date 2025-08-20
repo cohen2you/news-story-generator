@@ -225,11 +225,11 @@ Context News Article:
 Headline: ${contextArticle.headline}
 Content: ${contextArticle.body}
 
-Requirements:
+CRITICAL REQUIREMENTS:
 1. Create exactly 2 paragraphs that provide additional context
 2. Make the content relevant to the current article's topic
 3. Keep each paragraph to EXACTLY 2 sentences maximum - no more, no less
-4. You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this exact format: <a href="${contextArticle.url}">[three word phrase]</a>
+4. **MANDATORY HYPERLINK RULE**: You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this EXACT format: <a href="${contextArticle.url}">three word phrase</a>
 5. The SECOND paragraph should have NO hyperlinks
 6. Make the content flow naturally with the current article
 7. Focus on providing valuable context that enhances the reader's understanding
@@ -237,13 +237,20 @@ Requirements:
 9. Keep paragraphs short and impactful - aim for 1-2 sentences each
 10. The hyperlink should be embedded within existing words in the text, not as "[source]" at the end
 11. Choose relevant three-word phrases within the sentences to hyperlink, such as company names, key terms, or action phrases
-12. CRITICAL: ONLY the first paragraph should contain exactly one hyperlink in the format specified above
+12. **CRITICAL**: ONLY the first paragraph should contain exactly one hyperlink in the format specified above
 13. Do NOT reference "a recent article" or similar phrases - just embed the hyperlink naturally in the existing sentence structure
-14. Ensure proper spacing between paragraphs - add double line breaks between paragraphs
-15. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
+14. **CRITICAL**: Format the output with proper HTML paragraph tags. Each paragraph should be wrapped in <p> tags.
+15. **CRITICAL**: Ensure no paragraph has more than 2 sentences - break longer paragraphs into smaller ones
+16. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
     * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "<strong>Bill Ackman</strong>" or "<strong>Warren Buffett</strong>")
     * Second and subsequent references: Use only the last name without bolding (e.g., "Ackman" or "Buffett")
     * This applies to all people mentioned in the context paragraphs
+
+**MANDATORY EXAMPLE FORMAT:**
+<p>First paragraph with hyperlink <a href="${contextArticle.url}">three word phrase</a> and second sentence.</p>
+<p>Second paragraph with no hyperlinks and second sentence.</p>
+
+**CRITICAL**: You MUST include the hyperlink in the first paragraph. Do not skip this requirement.
 
 Write the 2 context paragraphs now:`;
 
@@ -256,15 +263,21 @@ Write the 2 context paragraphs now:`;
 
     const contextParagraphs = completion.choices[0].message?.content?.trim() || '';
 
+    // Debug: Log the generated context to see if hyperlinks are included
+    console.log('Generated context paragraphs:', contextParagraphs);
+    console.log('Contains hyperlink:', contextParagraphs.includes('<a href='));
+
     if (!contextParagraphs) {
       return NextResponse.json({ error: 'Failed to generate context.' }, { status: 500 });
     }
 
-    // Ensure proper spacing between paragraphs
+    // Ensure proper HTML paragraph formatting
     const formattedContextParagraphs = contextParagraphs
       .replace(/\n\n+/g, '\n\n') // Normalize multiple line breaks to double
       .replace(/\n([^<])/g, '\n\n$1') // Ensure paragraphs are separated by double line breaks
-      .replace(/([^>])\n\n([^<])/g, '$1\n\n$2'); // Ensure proper spacing around HTML tags
+      .replace(/([^>])\n\n([^<])/g, '$1\n\n$2') // Ensure proper spacing around HTML tags
+      .replace(/<p>\s*<\/p>/g, '') // Remove empty paragraphs
+      .replace(/(<p>.*?<\/p>)\s*(<p>.*?<\/p>)/g, '$1\n\n$2'); // Ensure proper spacing between <p> tags
 
     // Generate subhead first
     let contextSubhead = '';

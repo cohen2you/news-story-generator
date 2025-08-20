@@ -50,6 +50,15 @@ export default function EnhancedContextForm({ currentArticle, onContextAdded, on
         throw new Error(data.error || 'Failed to search articles');
       }
 
+      // Add debugging to see what the frontend receives
+      console.log('Frontend received data:', {
+        articles: data.articles?.length || 0,
+        totalFound: data.totalFound,
+        searchTerm: data.searchTerm,
+        note: data.note
+      });
+      console.log('Articles array:', data.articles);
+
       setArticles(data.articles || []);
       
       if (data.totalFound === 0) {
