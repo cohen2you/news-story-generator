@@ -64,8 +64,8 @@ export async function POST(request: Request) {
     console.log(`Relevant tickers found: ${relevantTickers.length > 0 ? 'Yes' : 'No'}`);
     
     // Make API calls for each relevant ticker, or make a search if no tickers found
-    const allArticles = [];
-    const seenUrls = new Set(); // Track seen URLs to avoid duplicates
+    const allArticles: any[] = [];
+    const seenUrls = new Set<string>(); // Track seen URLs to avoid duplicates
     const maxCalls = relevantTickers.length > 0 ? relevantTickers.length : 1; // One call per ticker, or one search call
     
     // Helper function to add articles without duplicates
