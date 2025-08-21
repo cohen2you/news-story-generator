@@ -73,6 +73,9 @@ export default function PRStoryGeneratorPage() {
   const [isSearchingLeadHyperlink, setIsSearchingLeadHyperlink] = useState(false);
   const [editorialReviewChanges, setEditorialReviewChanges] = useState<string[]>([]);
   const [editorialReviewStats, setEditorialReviewStats] = useState({ originalWordCount: 0, newWordCount: 0 });
+  const [headlinesAndKeyPoints, setHeadlinesAndKeyPoints] = useState<{ headlines: string[], keyPoints: string[] } | null>(null);
+  const [generatingHeadlines, setGeneratingHeadlines] = useState(false);
+  const [copiedItems, setCopiedItems] = useState<{ [key: string]: boolean }>({});
 
 
 
@@ -954,6 +957,50 @@ export default function PRStoryGeneratorPage() {
       navigator.clipboard.write([clipboardItem]);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
+    }
+  };
+
+  const handleGenerateHeadlinesAndKeyPoints = async () => {
+    if (!article) {
+      alert('Please generate an article first');
+      return;
+    }
+
+    setGeneratingHeadlines(true);
+    try {
+      const response = await fetch('/api/generate/headlines-keypoints', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ article }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate headlines and key points');
+      }
+
+      setHeadlinesAndKeyPoints(data);
+    } catch (error: any) {
+      console.error('Error generating headlines and key points:', error);
+      alert('Failed to generate headlines and key points: ' + error.message);
+    } finally {
+      setGeneratingHeadlines(false);
+    }
+  };
+
+  const handleCopyItem = async (text: string, itemType: string, index: number) => {
+    const itemKey = `${itemType}-${index}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedItems(prev => ({ ...prev, [itemKey]: true }));
+      setTimeout(() => {
+        setCopiedItems(prev => ({ ...prev, [itemKey]: false }));
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy item:', error);
     }
   };
 
@@ -2000,7 +2047,170 @@ export default function PRStoryGeneratorPage() {
                   >
                     {copied ? 'Copied!' : 'Copy Article'}
                   </button>
+                  <button
+                    onClick={handleGenerateHeadlinesAndKeyPoints}
+                    disabled={generatingHeadlines}
+                    style={{ 
+                      padding: '8px 16px', 
+                      background: generatingHeadlines ? '#6b7280' : '#7c3aed', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: 4,
+                      fontSize: 14,
+                      cursor: generatingHeadlines ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {generatingHeadlines ? 'Generating...' : 'Generate Headlines & Key Points'}
+                  </button>
                </div>
+
+        {/* Headlines and Key Points Display */}
+        {headlinesAndKeyPoints && (
+          <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+            <div style={{ 
+              backgroundColor: '#f0f9ff', 
+              border: '1px solid #0ea5e9', 
+              borderRadius: '8px', 
+              padding: '20px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+            }}>
+              <h3 style={{ 
+                fontWeight: '600', 
+                fontSize: '18px', 
+                color: '#0c4a6e', 
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <span style={{ 
+                  backgroundColor: '#0ea5e9', 
+                  color: 'white', 
+                  borderRadius: '50%', 
+                  width: '24px', 
+                  height: '24px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  fontSize: '14px', 
+                  fontWeight: 'bold',
+                  marginRight: '12px'
+                }}>
+                  ✏️
+                </span>
+                Generated Headlines & Key Points
+              </h3>
+              
+              {/* Headlines Section */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ 
+                  fontWeight: '600', 
+                  fontSize: '16px', 
+                  color: '#0c4a6e', 
+                  marginBottom: '12px' 
+                }}>
+                  Headlines:
+                </h4>
+                <div style={{ 
+                  backgroundColor: 'white', 
+                  border: '1px solid #e0f2fe', 
+                  borderRadius: '6px', 
+                  padding: '16px' 
+                }}>
+                  {headlinesAndKeyPoints.headlines.map((headline, index) => (
+                    <div key={index} style={{ 
+                      marginBottom: index < headlinesAndKeyPoints.headlines.length - 1 ? '12px' : '0',
+                      padding: '8px 12px',
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '4px',
+                      borderLeft: '3px solid #0ea5e9',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: '600', color: '#0c4a6e', marginRight: '8px' }}>
+                          {index + 1}.
+                        </span>
+                        {headline}
+                      </div>
+                      <button
+                        onClick={() => handleCopyItem(headline, 'headline', index)}
+                        style={{
+                          padding: '4px 8px',
+                          background: copiedItems[`headline-${index}`] ? '#059669' : '#0ea5e9',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          marginLeft: '12px',
+                          minWidth: '60px'
+                        }}
+                      >
+                        {copiedItems[`headline-${index}`] ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Key Points Section */}
+              <div>
+                <h4 style={{ 
+                  fontWeight: '600', 
+                  fontSize: '16px', 
+                  color: '#0c4a6e', 
+                  marginBottom: '12px' 
+                }}>
+                  Key Points:
+                </h4>
+                <div style={{ 
+                  backgroundColor: 'white', 
+                  border: '1px solid #e0f2fe', 
+                  borderRadius: '6px', 
+                  padding: '16px' 
+                }}>
+                  {headlinesAndKeyPoints.keyPoints.map((keyPoint, index) => (
+                    <div key={index} style={{ 
+                      marginBottom: index < headlinesAndKeyPoints.keyPoints.length - 1 ? '12px' : '0',
+                      padding: '8px 12px',
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '4px',
+                      borderLeft: '3px solid #10b981',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: '600', color: '#065f46', marginRight: '8px' }}>
+                          {index + 1}.
+                        </span>
+                        {keyPoint}
+                      </div>
+                      <button
+                        onClick={() => handleCopyItem(keyPoint, 'keypoint', index)}
+                        style={{
+                          padding: '4px 8px',
+                          background: copiedItems[`keypoint-${index}`] ? '#059669' : '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          marginLeft: '12px',
+                          minWidth: '60px'
+                        }}
+                      >
+                        {copiedItems[`keypoint-${index}`] ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
           <div
             ref={articleRef}
             style={{
