@@ -13,9 +13,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Article is required' }, { status: 400 });
     }
 
-    const prompt = `You are a professional financial news editor specializing in viral, click-worthy headlines. Based on the following article, generate:
+    const prompt = `You are a professional financial news editor specializing in thoughtful, insightful, and click-worthy headlines for a respected financial publication. Based on the following article, generate:
 
-1. THREE different headlines that are PUNCHY, CLICKY, and VIRAL-WORTHY
+1. THREE different headlines that are PUNCHY, CLICKY, THOUGHTFUL, and INSIGHTFUL
 2. TWO key points (each exactly 12 words) that summarize the most important aspects of the story
 
 Article:
@@ -33,19 +33,25 @@ KEY POINTS:
 2. [Second key point - exactly 12 words]
 
 HEADLINE REQUIREMENTS:
-- Make headlines PUNCHY and CLICK-WORTHY - use strong action verbs, numbers, and emotional triggers
+- Make headlines PUNCHY and CLICK-WORTHY while remaining THOUGHTFUL and INSIGHTFUL for a financial audience
 - ALWAYS start with the primary stock ticker (e.g., "AAPL", "TSLA") or the main person's name (e.g., "Trump", "Powell", "Cook") when possible
-- Use power words like: "Slams", "Crashes", "Explodes", "Dumps", "Surges", "Warns", "Reveals", "Shocks", "Destroys", "Annihilates"
+- Use sophisticated power words like: "Slams", "Crashes", "Explodes", "Dumps", "Surges", "Warns", "Reveals", "Shocks", "Destroys", "Annihilates", "Transforms", "Revolutionizes", "Disrupts", "Accelerates", "Collapses"
 - Include specific numbers, percentages, or dollar amounts when available
-- Make them feel urgent and newsworthy
+- Make them feel urgent and newsworthy while maintaining credibility
 - Keep them under 60 characters when possible for social media sharing
 - Use emotional triggers that make readers want to click
+- NO QUOTES - use direct statements instead
+- EVERY WORD should start with a capital letter (Title Case)
+- NO EXCLAMATION POINTS - use strong verbs and numbers instead
+- Focus on market impact, strategic implications, and financial significance
 
 Examples of good headlines:
-- "AAPL Slams Analysts With Record-Breaking Q4 Earnings"
-- "Trump Warns Fed: 'You're Making A Huge Mistake'"
-- "TSLA Stock Explodes 15% After Musk's AI Announcement"
-- "Powell's Shocking Rate Decision Sends Markets Into Chaos"
+- "AAPL Slams Analysts With Record Breaking Q4 Earnings"
+- "Trump Warns Fed About Inflation Policy Mistakes"
+- "TSLA Stock Explodes 15 Percent After AI Announcement"
+- "Powell Shocking Rate Decision Sends Markets Into Chaos"
+- "NVDA Transforms Gaming Industry With AI Breakthrough"
+- "Fed Chair Reveals Unexpected Policy Shift Timeline"
 
 The key points should capture the most critical information in exactly 12 words each.`;
 
