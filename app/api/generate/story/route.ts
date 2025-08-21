@@ -7,6 +7,18 @@ const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 const MODEL = 'gpt-4o';
 
+// Helper function to get current date in readable format
+function getCurrentDate(): string {
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions = { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  };
+  return now.toLocaleDateString('en-US', options);
+}
+
 // Helper function to extract outlet name from URL
 function getOutletNameFromUrl(url: string): string {
   if (!url) return 'The company';
@@ -248,7 +260,7 @@ NOTE: Hyperlinks will be added separately using the "Add Lead Hyperlink" feature
 
 CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have more information, create additional paragraphs.
 
-- IMPORTANT: In your lead, if the source text or PR/article date mentions a specific day, use that date. If no specific date is mentioned, use today's date or "recently" as appropriate. Do not force price movement timing if the news is not about stock price changes.
+- IMPORTANT: In your lead, ALWAYS identify the specific day when the news occurred. If the source text mentions a specific date, use that date. If no specific date is mentioned, use today's date (${getCurrentDate()}). NEVER use "recently" - always specify the actual day. Do not force price movement timing if the news is not about stock price changes.
 
 - NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
   * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "President <strong>Donald Trump</strong>" or "CEO <strong>Tim Cook</strong>")
@@ -256,7 +268,9 @@ CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have mo
   * This applies to all people mentioned in the article, including politicians, executives, analysts, etc.
   * Exception: Analyst names in analyst notes should follow the specific analyst note formatting rules below
 
-- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. When referencing the source material, if a specific date is available, mention it (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If no specific date is available, use "recently" or "today" as appropriate. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
+- DATE AND MONTH FORMATTING: Always capitalize month names (January, February, March, April, May, June, July, August, September, October, November, December). Never use lowercase for month names.
+
+- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. When referencing the source material, if a specific date is available, mention it (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If no specific date is available, use today's date (${getCurrentDate()}). NEVER use "recently" - always specify the actual day. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
 
 CRITICAL SOURCE ATTRIBUTION RULE: You MUST include a source attribution in the second paragraph (immediately after the lead paragraph). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name:', outletName, 'for URL:', sourceUrl); return `The second paragraph MUST begin with: "${outletName} <a href="${sourceUrl}">reports</a>" - you MUST include the complete HTML hyperlink format exactly as shown, but do NOT add a period after the hyperlink. Continue the sentence naturally after the hyperlink.`; })() : 'The second paragraph MUST begin with: "The company reports."'}
 
