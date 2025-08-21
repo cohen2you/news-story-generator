@@ -46,12 +46,12 @@ HEADLINE REQUIREMENTS:
 - Focus on market impact, strategic implications, and financial significance
 
 Examples of good headlines:
-- "AAPL Slams Analysts With Record Breaking Q4 Earnings"
-- "Trump Warns Fed About Inflation Policy Mistakes"
-- "TSLA Stock Explodes 15 Percent After AI Announcement"
-- "Powell Shocking Rate Decision Sends Markets Into Chaos"
-- "NVDA Transforms Gaming Industry With AI Breakthrough"
-- "Fed Chair Reveals Unexpected Policy Shift Timeline"
+- AAPL Slams Analysts With Record Breaking Q4 Earnings
+- Trump Warns Fed About Inflation Policy Mistakes
+- TSLA Stock Explodes 15 Percent After AI Announcement
+- Powell Shocking Rate Decision Sends Markets Into Chaos
+- NVDA Transforms Gaming Industry With AI Breakthrough
+- Fed Chair Reveals Unexpected Policy Shift Timeline
 
 The key points should capture the most critical information in exactly 12 words each.`;
 
