@@ -34,6 +34,8 @@ export async function POST(request: Request) {
         const prompt = `
 You are a financial journalist. Given the current article and a selected Benzinga news article, create 1-2 very concise paragraphs that add relevant context to the current article.
 
+IMPORTANT EXAMPLE: If the main article refers to someone as "Johnson" and "Trump", then in your context paragraphs, you MUST also say "Johnson" and "Trump" - NOT "Brandon Johnson" and "Donald Trump". The naming convention must match exactly.
+
 Current Article:
 ${currentArticle.substring(0, 1000)}
 
@@ -63,13 +65,15 @@ Requirements:
 14. CRITICAL: Format the output with proper HTML paragraph tags. Each paragraph should be wrapped in <p> tags.
 15. CRITICAL: Ensure no paragraph has more than 2 sentences - break longer paragraphs into smaller ones
 16. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
-    * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "<strong>Bill Ackman</strong>" or "<strong>Warren Buffett</strong>")
-    * Second and subsequent references: Use only the last name without bolding (e.g., "Ackman" or "Buffett")
-    * This applies to all people mentioned in the context paragraphs
-    * CRITICAL: Follow the name usage patterns established in the current article above
-    * If the current article uses only last names (e.g., "Johnson", "Trump"), use only last names in context
+    * CRITICAL: You MUST follow the name usage patterns established in the current article above
+    * If the current article uses only last names (e.g., "Johnson", "Trump", "Bowser"), use ONLY last names in context
     * If the current article uses full names, use full names in context
-    * Maintain consistency with how names are already established in the main article
+    * NEVER introduce a full name if the current article has already established the person by last name only
+    * NEVER introduce a last name if the current article has already established the person by full name
+    * This is a CRITICAL requirement - the context must match the naming convention already established
+    * Examples: If the main article says "Johnson" and "Trump", then in context say "Johnson" and "Trump", NOT "Brandon Johnson" and "Donald Trump"
+    * Examples: If the main article says "Brandon Johnson" and "Donald Trump", then in context say "Brandon Johnson" and "Donald Trump"
+    * The goal is to maintain perfect consistency with how names are already referenced in the main article
 17. TEMPORAL CONTEXT RULES: When the context article is from a different time period than the current story:
     * ALWAYS explicitly mention the time difference (e.g., "June announcement", "earlier this year", "last month")
     * Explain the logical connection between the historical event and current developments
@@ -257,6 +261,7 @@ function analyzeNamePatterns(articleText: string): string {
     { full: 'Joe Biden', short: 'Biden' },
     { full: 'Brandon Johnson', short: 'Johnson' },
     { full: 'Muriel Bowser', short: 'Bowser' },
+    { full: 'JB Pritzker', short: 'Pritzker' },
     { full: 'Zohran Mamdani', short: 'Mamdani' },
     { full: 'Elon Musk', short: 'Musk' },
     { full: 'Warren Buffett', short: 'Buffett' },
@@ -279,7 +284,7 @@ function analyzeNamePatterns(articleText: string): string {
   
   // Check which names are used and how
   namePatterns.forEach(pattern => {
-    const fullNameCount = (articleText.match(new RegExp(pattern.full, 'gi')) || []).length;
+    const fullNameCount = (articleText.match(new RegExp(pattern.full.replace(/\s+/g, '\\s+'), 'gi')) || []).length;
     const shortNameCount = (articleText.match(new RegExp(`\\b${pattern.short}\\b`, 'gi')) || []).length;
     
     if (fullNameCount > 0 || shortNameCount > 0) {
@@ -289,6 +294,36 @@ function analyzeNamePatterns(articleText: string): string {
         patterns.push(`- ${pattern.full} is used ${fullNameCount} times (use full name)`);
       } else if (shortNameCount > 0) {
         patterns.push(`- ${pattern.short} is used ${shortNameCount} times (use last name only)`);
+      }
+    }
+  });
+  
+  // Also check for any other names that might be used consistently
+  const allWords = articleText.split(/\s+/);
+  const wordFrequency: { [key: string]: number } = {};
+  
+  allWords.forEach(word => {
+    const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
+    if (cleanWord.length > 2 && /^[a-z]+$/i.test(cleanWord)) {
+      wordFrequency[cleanWord] = (wordFrequency[cleanWord] || 0) + 1;
+    }
+  });
+  
+  // Look for potential last names that appear multiple times
+  Object.entries(wordFrequency).forEach(([word, count]) => {
+    if (count >= 2 && word.length >= 4 && /^[A-Z]/.test(word)) {
+      // Check if this might be a last name by looking for it in the article
+      const wordRegex = new RegExp(`\\b${word}\\b`, 'gi');
+      const matches = articleText.match(wordRegex) || [];
+      if (matches.length >= 2) {
+        // Check if it's not already covered by our name patterns
+        const isCovered = namePatterns.some(pattern => 
+          pattern.short.toLowerCase() === word.toLowerCase() || 
+          pattern.full.toLowerCase().includes(word.toLowerCase())
+        );
+        if (!isCovered) {
+          patterns.push(`- "${word}" appears ${count} times (likely a last name - use last name only)`);
+        }
       }
     }
   });
