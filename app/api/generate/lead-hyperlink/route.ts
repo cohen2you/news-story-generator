@@ -28,7 +28,11 @@ export async function POST(req: Request) {
         // Create a landing page object instead of searching for specific articles
         const landingPage = await generateLandingPageForTerm(searchTerm);
         console.log('Generated landing page for term:', searchTerm, landingPage);
-        if (landingPage && landingPages.length < 5) { // Limit to 5 landing pages
+        
+        // Check if we already have a landing page with this URL
+        const urlExists = landingPages.some(page => page.url === landingPage.url);
+        
+        if (landingPage && !urlExists && landingPages.length < 5) { // Limit to 5 landing pages
           landingPages.push(landingPage);
         }
       } catch (error) {
@@ -67,6 +71,137 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       error: error.message || 'Failed to search for hyperlink articles' 
     }, { status: 500 });
+  }
+}
+
+// Function to discover available topics from Benzinga API
+async function getAvailableTopics(): Promise<string[]> {
+  try {
+    console.log('🔍 Starting API discovery...');
+    console.log('🔑 API Key present:', !!BENZINGA_API_KEY);
+    console.log('🌐 API URL:', `${BZ_NEWS_URL}?token=${BENZINGA_API_KEY ? '***' : 'MISSING'}&limit=100`);
+    
+    // Try to get topics from Benzinga's news API
+    const response = await fetch(`${BZ_NEWS_URL}?token=${BENZINGA_API_KEY}&limit=100`);
+    console.log('📡 API Response status:', response.status);
+    console.log('📡 API Response ok:', response.ok);
+    console.log('📡 API Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    // Check if response is XML or JSON
+    const contentType = response.headers.get('content-type');
+    console.log('📄 Content-Type:', contentType);
+    
+    let data: any;
+    
+    if (contentType && contentType.includes('xml')) {
+      console.log('📄 Parsing XML response...');
+      const xmlText = await response.text();
+      console.log('📄 XML Response preview:', xmlText.substring(0, 500));
+      console.log('📄 XML Response length:', xmlText.length);
+      data = await parseXMLResponse(xmlText);
+    } else {
+      console.log('📄 Parsing JSON response...');
+      const jsonText = await response.text();
+      console.log('📄 JSON Response preview:', jsonText.substring(0, 500));
+      console.log('📄 JSON Response length:', jsonText.length);
+      
+      try {
+        data = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.log('❌ JSON parse failed:', parseError);
+        console.log('📄 Raw response text:', jsonText);
+        return [];
+      }
+    }
+    
+    console.log('📊 Parsed data structure:', JSON.stringify(data, null, 2).substring(0, 1000));
+    console.log('📊 Data has news property:', !!data.news);
+    console.log('📊 News is array:', Array.isArray(data.news));
+    console.log('📊 News length:', data.news?.length || 0);
+    
+    const topics = new Set<string>();
+    
+    // Extract topics from article tags and categories
+    if (data.news && Array.isArray(data.news)) {
+      console.log('🔍 Processing news articles...');
+      data.news.forEach((article: any, index: number) => {
+        if (index < 3) { // Log first 3 articles for debugging
+          console.log(`📰 Article ${index}:`, {
+            hasTags: !!article.tags,
+            hasCategories: !!article.categories,
+            tags: article.tags,
+            categories: article.categories
+          });
+        }
+        
+        if (article.tags && Array.isArray(article.tags)) {
+          article.tags.forEach((tag: string) => {
+            if (tag && tag.length > 2) { // Filter out very short tags
+              topics.add(tag.toLowerCase());
+            }
+          });
+        }
+        if (article.categories && Array.isArray(article.categories)) {
+          article.categories.forEach((category: string) => {
+            if (category && category.length > 2) {
+              topics.add(category.toLowerCase());
+            }
+          });
+        }
+      });
+    } else {
+      console.log('❌ No valid news data found in response');
+      console.log('📊 Available data keys:', Object.keys(data || {}));
+    }
+    
+    console.log('🎯 Discovered topics from API:', Array.from(topics).slice(0, 20));
+    console.log('🎯 Total topics found:', topics.size);
+    return Array.from(topics);
+  } catch (error: any) {
+    console.log('❌ API discovery failed:', error);
+    console.log('❌ Error stack:', error.stack);
+    return [];
+  }
+}
+
+// Helper function to parse XML response
+async function parseXMLResponse(xmlText: string): Promise<any> {
+  try {
+    // Simple XML parsing for common patterns
+    const topics = new Set<string>();
+    
+    // Extract tags from XML (basic pattern matching)
+    const tagMatches = xmlText.match(/<tag[^>]*>([^<]+)<\/tag>/gi);
+    if (tagMatches) {
+      tagMatches.forEach(match => {
+        const tagContent = match.replace(/<[^>]*>/g, '');
+        if (tagContent && tagContent.length > 2) {
+          topics.add(tagContent.toLowerCase());
+        }
+      });
+    }
+    
+    // Extract categories from XML
+    const categoryMatches = xmlText.match(/<category[^>]*>([^<]+)<\/category>/gi);
+    if (categoryMatches) {
+      categoryMatches.forEach(match => {
+        const categoryContent = match.replace(/<[^>]*>/g, '');
+        if (categoryContent && categoryContent.length > 2) {
+          topics.add(categoryContent.toLowerCase());
+        }
+      });
+    }
+    
+    // Return in expected format
+    return {
+      news: Array.from(topics).map(topic => ({
+        tags: [topic],
+        categories: [topic]
+      }))
+    };
+  } catch (error) {
+    console.log('XML parsing failed:', error);
+    return { news: [] };
   }
 }
 
@@ -514,16 +649,75 @@ async function generateLandingPageForTerm(searchTerm: string): Promise<any> {
     }
   }
 
-  // Generate a generic landing page for the search term
-  console.log('Generating generic landing page for:', searchTerm);
+  // Try to discover a topic page before falling back to generic search
+  console.log('No mapping found, trying to discover topic page for:', searchTerm);
+  
+  try {
+    const availableTopics = await getAvailableTopics();
+    
+    // Look for a topic that matches our search term with better matching logic
+    let matchingTopic = availableTopics.find(topic => 
+      topic.includes(searchTermLower) || searchTermLower.includes(topic)
+    );
+    
+    // If no direct match, try fuzzy matching for company names and tickers
+    if (!matchingTopic && searchTermLower.length >= 3) {
+      matchingTopic = availableTopics.find(topic => {
+        // Check for company name variations
+        if (searchTermLower === 'googl' || searchTermLower === 'google') {
+          return topic.includes('google') || topic.includes('alphabet');
+        }
+        if (searchTermLower === 'aapl') {
+          return topic.includes('apple');
+        }
+        if (searchTermLower === 'tsla') {
+          return topic.includes('tesla');
+        }
+        if (searchTermLower === 'amzn') {
+          return topic.includes('amazon');
+        }
+        if (searchTermLower === 'msft') {
+          return topic.includes('microsoft');
+        }
+        if (searchTermLower === 'nvda') {
+          return topic.includes('nvidia');
+        }
+        
+        // Check for partial word matches
+        return topic.split(' ').some(word => 
+          word.length >= 3 && searchTermLower.includes(word)
+        );
+      });
+    }
+    
+    if (matchingTopic) {
+      console.log('Found matching topic:', matchingTopic);
+      return {
+        url: `https://www.benzinga.com/topic/${matchingTopic.replace(/\s+/g, '-')}`,
+        headline: `${matchingTopic.charAt(0).toUpperCase() + matchingTopic.slice(1)} News and Analysis`,
+        title: `${matchingTopic.charAt(0).toUpperCase() + matchingTopic.slice(1)} Market Coverage`,
+        created: new Date().toISOString(),
+        score: 70,
+        relevanceScore: 70,
+        isLandingPage: true,
+        discovered: true
+      };
+    }
+  } catch (error) {
+    console.log('Topic discovery failed, falling back to generic search:', error);
+  }
+  
+  // Generate a proper topic landing page instead of search
+  console.log('Generating topic landing page for:', searchTerm);
   return {
-    url: `https://www.benzinga.com/search?q=${encodeURIComponent(searchTerm)}`,
+    url: `https://www.benzinga.com/topic/${searchTerm.toLowerCase().replace(/\s+/g, '-')}`,
     headline: `${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)} News and Analysis`,
-    title: `${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)} Market News`,
+    title: `${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)} Market Coverage`,
     created: new Date().toISOString(),
-    score: 50,
-    relevanceScore: 50,
-    isLandingPage: true
+    score: 70,
+    relevanceScore: 70,
+    isLandingPage: true,
+    discovered: true
   };
 }
 
