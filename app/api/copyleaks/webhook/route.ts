@@ -6,7 +6,7 @@ const scanResults = new Map<string, any>();
 const resultDetails = new Map<string, any>();
 
 // Function to request export for detailed text segments
-async function requestExport(scanId: string) {
+async function requestExport(scanId: string, resultIds: string[]) {
   if (!process.env.COPYLEAKS_API_KEY) {
     console.log('Copyleaks API key not configured, skipping export request');
     return;
@@ -16,7 +16,7 @@ async function requestExport(scanId: string) {
   
   try {
     console.log(`=== REQUESTING EXPORT FOR SCANID: ${scanId} ===`);
-    const exportResult = await copyleaksService.requestExport(scanId);
+    const exportResult = await copyleaksService.requestExport(scanId, resultIds);
     console.log('=== EXPORT REQUESTED SUCCESSFULLY ===', exportResult);
   } catch (error: any) {
     console.error(`=== FAILED TO REQUEST EXPORT FOR ${scanId} ===`, error.message);
@@ -100,7 +100,8 @@ export async function POST(request: Request) {
 
       // Request export to get detailed text segments
       console.log('=== ABOUT TO REQUEST EXPORT ===');
-      await requestExport(scanId);
+      const resultIds = internetResults.map(result => result.id);
+      await requestExport(scanId, resultIds);
       console.log('=== EXPORT REQUEST COMPLETED ===');
 
     } else {

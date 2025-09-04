@@ -293,23 +293,21 @@ class CopyleaksService {
     return await response.json();
   }
 
-  async requestExport(scanId: string): Promise<any> {
+  async requestExport(scanId: string, resultIds: string[]): Promise<any> {
     const token = await this.authenticate();
     const exportId = `export-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     const webhookUrl = process.env.COPYLEAKS_WEBHOOK_URL || 'https://news-story-generator.onrender.com';
     
     const requestBody = {
-      results: [
-        {
-          id: "results",
-          verb: "POST",
-          headers: [
-            ["Content-Type", "application/json"]
-          ],
-          endpoint: `${webhookUrl}/api/copyleaks/export/${scanId}/results`
-        }
-      ],
+      results: resultIds.map(resultId => ({
+        id: resultId,
+        verb: "POST",
+        headers: [
+          ["Content-Type", "application/json"]
+        ],
+        endpoint: `${webhookUrl}/api/copyleaks/export/${scanId}/results/${resultId}`
+      })),
       completionWebhook: `${webhookUrl}/api/copyleaks/export/${scanId}/completed`,
       maxRetries: 3
     };
