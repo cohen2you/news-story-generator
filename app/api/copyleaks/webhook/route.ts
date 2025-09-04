@@ -11,33 +11,42 @@ export async function POST(request: Request) {
     
     console.log('Webhook received:', JSON.stringify(webhookData, null, 2));
 
-    const { scanId, status, alerts, results } = webhookData;
+    // Handle the actual Copyleaks webhook format
+    const scanId = webhookData.scannedDocument?.scanId;
+    const results = webhookData.results;
+    const score = results?.score;
+    const internetResults = results?.internet || [];
+    const totalWords = webhookData.scannedDocument?.totalWords || 0;
 
     if (!scanId) {
       return NextResponse.json({ error: 'Missing scanId' }, { status: 400 });
     }
 
-    // Handle different webhook types
-    if (status === 'completed') {
-      // This is the completion webhook with AI detection and overview data
-      const aiDetected = alerts?.some(alert => alert.type === 'ai-detection') || false;
-      const aiProbability = alerts?.find(alert => alert.type === 'ai-detection')?.data?.probability || 0;
-
+    // Process the scan results
+    if (results && internetResults.length > 0) {
+      // Store the main scan result
       scanResults.set(scanId, {
         scanId,
         status: 'completed',
-        aiDetected,
-        aiProbability,
-        alerts,
+        aiDetected: false, // AI detection not enabled in this scan
+        aiProbability: 0,
+        totalWords,
         timestamp: new Date().toISOString(),
-        plagiarismResults: results || [],
+        plagiarismResults: internetResults.map(result => ({
+          resultId: result.id,
+          url: result.url,
+          title: result.title,
+          matchedWords: result.matchedWords,
+          identicalWords: result.identicalWords,
+          minorChangesWords: result.similarWords || 0,
+          relatedMeaningWords: result.paraphrasedWords || 0,
+          totalWords: result.totalWords,
+          similarityPercentage: result.totalWords > 0 ? Math.round((result.matchedWords / result.totalWords) * 100) : 0,
+        })),
       });
 
-      console.log('Scan completed for:', scanId, 'with', results?.length || 0, 'results');
-
-    } else if (results && results.length > 0) {
-      // This is a result webhook for individual plagiarism matches
-      for (const result of results) {
+      // Store individual result details
+      for (const result of internetResults) {
         const resultKey = `${scanId}-${result.id}`;
         resultDetails.set(resultKey, {
           scanId,
@@ -46,26 +55,28 @@ export async function POST(request: Request) {
           title: result.title,
           matchedWords: result.matchedWords,
           identicalWords: result.identicalWords,
-          minorChangesWords: result.minorChangesWords,
-          relatedMeaningWords: result.relatedMeaningWords,
+          minorChangesWords: result.similarWords || 0,
+          relatedMeaningWords: result.paraphrasedWords || 0,
+          totalWords: result.totalWords,
+          similarityPercentage: result.totalWords > 0 ? Math.round((result.matchedWords / result.totalWords) * 100) : 0,
           timestamp: new Date().toISOString(),
         });
-
-        console.log('Result processed for:', scanId, 'result:', result.id);
       }
 
-    } else if (status === 'export-completed') {
-      // This is the export completed webhook
-      console.log('Export completed for:', scanId);
-      
+      console.log('Scan completed for:', scanId, 'with', internetResults.length, 'results');
+      console.log('Overall score:', score?.aggregatedScore || 0, '%');
     } else {
-      // Other status updates
+      // No results found
       scanResults.set(scanId, {
         scanId,
-        status,
+        status: 'completed',
+        aiDetected: false,
+        aiProbability: 0,
+        totalWords,
         timestamp: new Date().toISOString(),
+        plagiarismResults: [],
       });
-      console.log('Status update for:', scanId, 'status:', status);
+      console.log('Scan completed for:', scanId, 'with no plagiarism results');
     }
 
     return NextResponse.json({ success: true });

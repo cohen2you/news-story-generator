@@ -9,22 +9,64 @@ interface CopyleaksScanResponse {
 }
 
 interface CopyleaksWebhookData {
-  scanId: string;
-  status: string;
-  alerts?: Array<{
-    type: string;
-    message: string;
-    data?: any;
-  }>;
-  results?: Array<{
-    id: string;
-    url: string;
-    title: string;
-    matchedWords: number;
-    identicalWords: number;
-    minorChangesWords: number;
-    relatedMeaningWords: number;
-  }>;
+  scannedDocument?: {
+    scanId: string;
+    totalWords: number;
+    totalExcluded: number;
+    credits: number;
+    expectedCredits: number;
+    creationTime: string;
+    metadata: {
+      filename: string;
+    };
+    enabled: {
+      plagiarismDetection: boolean;
+      aiDetection: boolean;
+      explainableAi: boolean;
+      writingFeedback: boolean;
+      pdfReport: boolean;
+      cheatDetection: boolean;
+      aiSourceMatch: boolean;
+    };
+    detectedLanguage: string;
+  };
+  results?: {
+    score: {
+      identicalWords: number;
+      minorChangedWords: number;
+      relatedMeaningWords: number;
+      aggregatedScore: number;
+    };
+    internet: Array<{
+      url: string;
+      id: string;
+      title: string;
+      introduction: string;
+      matchedWords: number;
+      identicalWords: number;
+      similarWords: number;
+      paraphrasedWords: number;
+      totalWords: number;
+      metadata: {
+        publishDate?: string;
+        creationDate?: string;
+        lastModificationDate?: string;
+        author?: string;
+        organization?: string;
+        filename?: string;
+        authors: string[];
+      };
+      tags: string[];
+    }>;
+    database: any[];
+    batch: any[];
+    repositories: any[];
+  };
+  notifications: {
+    alerts: any[];
+  };
+  status: number;
+  developerPayload: string;
 }
 
 interface CopyleaksScanResult {
