@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-
-// Store exported data in memory (in production, use a database)
-const exportedData = new Map<string, any>();
+import { storeExportedData } from '@/lib/copyleaks-storage';
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +12,7 @@ export async function POST(request: Request) {
     console.log('Export data:', JSON.stringify(exportData, null, 2));
     
     // Store the completed export data
-    exportedData.set(`completed-${scanId}`, {
+    storeExportedData(`completed-${scanId}`, {
       scanId,
       data: exportData,
       timestamp: new Date().toISOString(),
@@ -36,7 +34,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const scanId = url.pathname.split('/')[4]; // Extract scanId from path
     
-    const data = exportedData.get(`completed-${scanId}`);
+    const { getExportedData } = await import('@/lib/copyleaks-storage');
+    const data = getExportedData(`completed-${scanId}`);
     
     if (!data) {
       return NextResponse.json({ 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getExportedData } from '@/lib/copyleaks-storage';
 
 export async function GET(request: Request) {
   try {
@@ -10,47 +11,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Missing scanId parameter' }, { status: 400 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const results: any = {};
 
     // Get completed export data
-    try {
-      const completedResponse = await fetch(`${baseUrl}/api/copyleaks/export/${scanId}/completed`);
-      if (completedResponse.ok) {
-        const completedData = await completedResponse.json();
-        if (completedData.status !== 'not_found') {
-          results.completed = completedData.data;
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching completed data:', error);
+    const completedKey = `completed-${scanId}`;
+    const completedData = getExportedData(completedKey);
+    if (completedData) {
+      results.completed = completedData.data;
     }
 
     // Get source export data
-    try {
-      const sourceResponse = await fetch(`${baseUrl}/api/copyleaks/export/${scanId}/source`);
-      if (sourceResponse.ok) {
-        const sourceData = await sourceResponse.json();
-        if (sourceData.status !== 'not_found') {
-          results.source = sourceData.data;
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching source data:', error);
+    const sourceKey = `source-${scanId}`;
+    const sourceData = getExportedData(sourceKey);
+    if (sourceData) {
+      results.source = sourceData.data;
     }
 
     // Get specific result data if resultId is provided
     if (resultId) {
-      try {
-        const resultResponse = await fetch(`${baseUrl}/api/copyleaks/export/${scanId}/results/${resultId}`);
-        if (resultResponse.ok) {
-          const resultData = await resultResponse.json();
-          if (resultData.status !== 'not_found') {
-            results.result = resultData.data;
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching result data:', error);
+      const resultKey = `result-${scanId}-${resultId}`;
+      const resultData = getExportedData(resultKey);
+      if (resultData) {
+        results.result = resultData.data;
       }
     }
 

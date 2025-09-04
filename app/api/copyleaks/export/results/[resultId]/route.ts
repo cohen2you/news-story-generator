@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-
-// Store exported data in memory (in production, use a database)
-const exportedData = new Map<string, any>();
+import { storeExportedData } from '@/lib/copyleaks-storage';
 
 export async function POST(request: Request, { params }: { params: Promise<{ resultId: string }> }) {
   try {
@@ -16,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     
     // Store the result export data
     const key = `result-${scanId}-${resultId}`;
-    exportedData.set(key, {
+    storeExportedData(key, {
       scanId,
       resultId,
       data: exportData,
@@ -40,8 +38,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ resu
     const scanId = url.pathname.split('/')[4]; // Extract scanId from path
     const { resultId } = await params;
     
+    const { getExportedData } = await import('@/lib/copyleaks-storage');
     const key = `result-${scanId}-${resultId}`;
-    const data = exportedData.get(key);
+    const data = getExportedData(key);
     
     if (!data) {
       return NextResponse.json({ 
