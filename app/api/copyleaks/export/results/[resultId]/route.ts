@@ -3,11 +3,11 @@ import { NextResponse } from 'next/server';
 // Store exported data in memory (in production, use a database)
 const exportedData = new Map<string, any>();
 
-export async function POST(request: Request, { params }: { params: { resultId: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ resultId: string }> }) {
   try {
     const url = new URL(request.url);
     const scanId = url.pathname.split('/')[4]; // Extract scanId from path
-    const resultId = params.resultId;
+    const { resultId } = await params;
     
     const exportData = await request.json();
     
@@ -34,11 +34,11 @@ export async function POST(request: Request, { params }: { params: { resultId: s
   }
 }
 
-export async function GET(request: Request, { params }: { params: { resultId: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ resultId: string }> }) {
   try {
     const url = new URL(request.url);
     const scanId = url.pathname.split('/')[4]; // Extract scanId from path
-    const resultId = params.resultId;
+    const { resultId } = await params;
     
     const key = `result-${scanId}-${resultId}`;
     const data = exportedData.get(key);

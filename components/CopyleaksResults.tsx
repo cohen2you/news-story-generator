@@ -30,6 +30,7 @@ interface ScanResult {
   overallSimilarityPercentage: number;
   timestamp: string;
   hasDetailedText?: boolean;
+  hasExportedData?: boolean;
 }
 
 export default function CopyleaksResults({ sourceResult, finalResult, onClose }: CopyleaksResultsProps) {
