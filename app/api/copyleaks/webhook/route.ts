@@ -27,18 +27,9 @@ async function requestExport(scanId: string) {
 // Function to check for exported data
 async function checkForExportedData(scanId: string): Promise<boolean> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    
-    // Check if we have completed export data
-    const completedResponse = await fetch(`${baseUrl}/api/copyleaks/export/${scanId}/completed`);
-    if (completedResponse.ok) {
-      const completedData = await completedResponse.json();
-      if (completedData.status !== 'not_found') {
-        console.log(`Found exported data for scanId: ${scanId}`);
-        return true;
-      }
-    }
-    
+    // Skip the check in webhook context to avoid ECONNREFUSED errors
+    // The export data will be available through the export endpoints when ready
+    console.log(`Skipping export data check for scanId: ${scanId} in webhook context`);
     return false;
   } catch (error) {
     console.error(`Error checking for exported data for ${scanId}:`, error);

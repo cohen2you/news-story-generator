@@ -300,11 +300,7 @@ class CopyleaksService {
     const webhookUrl = process.env.COPYLEAKS_WEBHOOK_URL || 'https://news-story-generator.onrender.com';
     
     const requestBody = {
-      webhooks: {
-        completed: `${webhookUrl}/api/copyleaks/export/${scanId}/completed`,
-        source: `${webhookUrl}/api/copyleaks/export/${scanId}/source`,
-        results: `${webhookUrl}/api/copyleaks/export/${scanId}/results/{resultId}`,
-      },
+      completionWebhook: `${webhookUrl}/api/copyleaks/export/${scanId}/completed`,
       format: 'json',
     };
 
