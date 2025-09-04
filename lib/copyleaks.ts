@@ -332,8 +332,15 @@ class CopyleaksService {
       throw new Error(`Failed to request export: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
-    const responseData = await response.json();
-    console.log('Export request successful:', responseData);
+    // Handle empty response body (204 No Content)
+    let responseData = null;
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 0) {
+      responseData = await response.json();
+      console.log('Export request successful:', responseData);
+    } else {
+      console.log('Export request successful (empty response body)');
+    }
 
     return {
       exportId,
