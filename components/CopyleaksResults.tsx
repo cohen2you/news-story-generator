@@ -1,0 +1,198 @@
+import React, { useState, useEffect } from 'react';
+
+interface CopyleaksResultsProps {
+  sourceResult?: ScanResult;
+  finalResult?: ScanResult;
+  onClose?: () => void;
+}
+
+interface ScanResult {
+  scanId: string;
+  status: string;
+  aiDetected: boolean;
+  aiProbability?: number;
+  plagiarismResults: Array<{
+    resultId: string;
+    url: string;
+    title: string;
+    matchedWords: number;
+    identicalWords: number;
+    minorChangesWords: number;
+    relatedMeaningWords: number;
+    totalWords: number;
+    similarityPercentage: number;
+  }>;
+  totalMatchedWords: number;
+  totalWords: number;
+  overallSimilarityPercentage: number;
+  timestamp: string;
+}
+
+export default function CopyleaksResults({ sourceResult, finalResult, onClose }: CopyleaksResultsProps) {
+
+  // Component only displays results - no polling needed
+  // Results are fetched externally and passed in when scan is complete
+
+  const fetchResults = () => {
+    // This function is called by the refresh button
+    // The actual fetching is handled by the parent component
+    window.location.reload();
+  };
+
+  const calculateSimilarityPercentage = (result: ScanResult) => {
+    return result.overallSimilarityPercentage || 0;
+  };
+
+  const getSimilarityColor = (percentage: number) => {
+    if (percentage < 10) return 'text-green-600';
+    if (percentage < 30) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getSimilarityLabel = (percentage: number) => {
+    if (percentage < 10) return 'Low similarity';
+    if (percentage < 30) return 'Moderate similarity';
+    return 'High similarity';
+  };
+
+  // Component only displays results - no loading states needed
+
+  return (
+    <div className="bg-white shadow-lg rounded-lg p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-gray-800">Copyleaks Scan Results</h2>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Source Article Results */}
+        {sourceResult && (
+          <div className="border rounded-lg p-4">
+            <h3 className="font-semibold text-lg mb-3 text-blue-600">Source Article</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">Status:</span>
+                <span className={`px-2 py-1 rounded text-sm ${
+                  sourceResult.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {sourceResult.status}
+                </span>
+              </div>
+              
+              {sourceResult.status === 'completed' && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Similarity:</span>
+                    <span className={`font-bold ${getSimilarityColor(calculateSimilarityPercentage(sourceResult))}`}>
+                      {calculateSimilarityPercentage(sourceResult)}% - {getSimilarityLabel(calculateSimilarityPercentage(sourceResult))}
+                    </span>
+                  </div>
+                  
+                  <div className="text-sm text-gray-600">
+                    <p>Total matched words: {sourceResult.totalMatchedWords}</p>
+                    <p>Total words: {sourceResult.totalWords}</p>
+                    <p>Plagiarism matches: {sourceResult.plagiarismResults.length}</p>
+                  </div>
+
+                  {sourceResult.aiDetected && (
+                    <div className="bg-orange-100 border border-orange-200 rounded p-3">
+                      <p className="text-orange-800 font-medium">
+                        AI-generated content detected ({Math.round((sourceResult.aiProbability || 0) * 100)}% probability)
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Final Article Results */}
+        {finalResult && (
+          <div className="border rounded-lg p-4">
+            <h3 className="font-semibold text-lg mb-3 text-green-600">Final Article</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">Status:</span>
+                <span className={`px-2 py-1 rounded text-sm ${
+                  finalResult.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {finalResult.status}
+                </span>
+              </div>
+              
+              {finalResult.status === 'completed' && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Similarity:</span>
+                    <span className={`font-bold ${getSimilarityColor(calculateSimilarityPercentage(finalResult))}`}>
+                      {calculateSimilarityPercentage(finalResult)}% - {getSimilarityLabel(calculateSimilarityPercentage(finalResult))}
+                    </span>
+                  </div>
+                  
+                  <div className="text-sm text-gray-600">
+                    <p>Total matched words: {finalResult.totalMatchedWords}</p>
+                    <p>Total words: {finalResult.totalWords}</p>
+                    <p>Plagiarism matches: {finalResult.plagiarismResults.length}</p>
+                  </div>
+
+                  {finalResult.aiDetected && (
+                    <div className="bg-orange-100 border border-orange-200 rounded p-3">
+                      <p className="text-orange-800 font-medium">
+                        AI-generated content detected ({Math.round((finalResult.aiProbability || 0) * 100)}% probability)
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Plagiarism Results */}
+      {(sourceResult?.plagiarismResults?.length || finalResult?.plagiarismResults?.length) && (
+        <div className="mt-6">
+          <h3 className="font-semibold text-lg mb-3">Plagiarism Matches</h3>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {sourceResult?.plagiarismResults?.map((result, index) => (
+              <div key={`source-${index}`} className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50">
+                <p className="font-medium text-sm">{result.title}</p>
+                <p className="text-xs text-gray-600">{result.url}</p>
+                <p className="text-xs text-gray-500">
+                  {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
+                </p>
+              </div>
+            ))}
+            {finalResult?.plagiarismResults?.map((result, index) => (
+              <div key={`final-${index}`} className="border-l-4 border-green-500 pl-3 py-2 bg-green-50">
+                <p className="font-medium text-sm">{result.title}</p>
+                <p className="text-xs text-gray-600">{result.url}</p>
+                <p className="text-xs text-gray-500">
+                  {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6 flex justify-between items-center text-sm text-gray-500">
+        <span>Last updated: {new Date().toLocaleString()}</span>
+        <button
+          onClick={fetchResults}
+          className="text-blue-600 hover:text-blue-800"
+        >
+          Refresh
+        </button>
+      </div>
+    </div>
+  );
+}

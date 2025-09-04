@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import CopyleaksResults from './CopyleaksResults';
 
 interface ComprehensiveArticleFormProps {
   onArticleGenerated?: (article: string) => void;
@@ -23,6 +24,145 @@ export default function ComprehensiveArticleForm({ onArticleGenerated }: Compreh
   const [ctaText, setCtaText] = useState('');
   const [subheadTexts, setSubheadTexts] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [copyleaksScan, setCopyleaksScan] = useState<any>(null);
+  const [copyleaksScanning, setCopyleaksScanning] = useState(false);
+  const [copyleaksError, setCopyleaksError] = useState('');
+  const [copyleaksResults, setCopyleaksResults] = useState<any>(null);
+
+  // Background polling for scan results
+  const pollForResults = async (sourceScanId: string, finalScanId: string) => {
+    const maxAttempts = 60; // 5 minutes with 5-second intervals
+    let attempts = 0;
+    
+    const poll = async () => {
+      try {
+        const promises = [];
+        
+        if (sourceScanId) {
+          promises.push(
+            fetch(`/api/copyleaks/webhook?scanId=${sourceScanId}`)
+              .then(res => res.ok ? res.json() : null)
+          );
+        }
+        
+        if (finalScanId) {
+          promises.push(
+            fetch(`/api/copyleaks/webhook?scanId=${finalScanId}`)
+              .then(res => res.ok ? res.json() : null)
+          );
+        }
+
+        const results = await Promise.all(promises);
+        
+        // Check if both scans are complete
+        let allComplete = true;
+        
+        if (sourceScanId && results[0] && results[0].status === 'completed') {
+          // Source scan complete
+        } else if (sourceScanId) {
+          allComplete = false;
+        }
+        
+        if (finalScanId) {
+          const finalIndex = sourceScanId ? 1 : 0;
+          if (results[finalIndex] && results[finalIndex].status === 'completed') {
+            // Final scan complete
+          } else {
+            allComplete = false;
+          }
+        }
+        
+        if (allComplete) {
+          // Fetch the actual results
+          const resultPromises = [];
+          
+          if (sourceScanId && results[0]) {
+            resultPromises.push(Promise.resolve(results[0]));
+          }
+          
+          if (finalScanId) {
+            const finalIndex = sourceScanId ? 1 : 0;
+            if (results[finalIndex]) {
+              resultPromises.push(Promise.resolve(results[finalIndex]));
+            }
+          }
+          
+          const finalResults = await Promise.all(resultPromises);
+          
+          setCopyleaksResults({
+            sourceResult: sourceScanId ? finalResults[0] : null,
+            finalResult: finalScanId ? (sourceScanId ? finalResults[1] : finalResults[0]) : null
+          });
+          
+          setCopyleaksScanning(false);
+          console.log('Copyleaks scan completed, showing results');
+          return;
+        }
+        
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000); // Poll every 5 seconds
+        } else {
+          console.log('Copyleaks scan polling timeout');
+          setCopyleaksError('Scan is taking longer than expected. Please try refreshing the page.');
+        }
+        
+      } catch (error) {
+        console.error('Error polling for results:', error);
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000);
+        }
+      }
+    };
+    
+    // Start polling after a short delay
+    setTimeout(poll, 10000); // Wait 10 seconds before first poll
+  };
+
+  // Copyleaks scan function
+  const runCopyleaksScan = async () => {
+    if (!article || !sourceText) {
+      setCopyleaksError('No article or source text available for scanning');
+      return;
+    }
+
+    setCopyleaksScanning(true);
+    setCopyleaksError('');
+    setCopyleaksScan(null);
+    setCopyleaksResults(null);
+
+    try {
+      const response = await fetch('/api/copyleaks/scan-article', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sourceArticle: sourceText,
+          finalArticle: article,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initiate Copyleaks scan');
+      }
+
+      setCopyleaksScan(data);
+      console.log('Copyleaks scan initiated:', data);
+      
+      // Start polling for results in the background
+      pollForResults(data.sourceScanId, data.finalScanId);
+      
+      // Keep scanning state true - it will be set to false when results are complete
+    } catch (err: any) {
+      setCopyleaksError(err.message || 'Failed to run Copyleaks scan');
+      console.error('Copyleaks scan error:', err);
+      setCopyleaksScanning(false); // Only set to false on error
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -314,6 +454,61 @@ While Trump announced on July 14 that he would sign off on "severe tariffs" agai
                   {JSON.stringify(marketData, null, 2)}
                 </pre>
               </div>
+            </div>
+          )}
+
+          {/* Copyleaks Scan Section */}
+          {article && (
+            <div className="mt-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                  Plagiarism Detection
+                </h3>
+                
+                <p className="text-gray-600 text-sm mb-4">
+                  Run a Copyleaks scan to compare your source material with the generated article for plagiarism detection and AI content analysis.
+                </p>
+                
+                <button
+                  onClick={runCopyleaksScan}
+                  disabled={copyleaksScanning || !sourceText}
+                  className={`px-6 py-3 rounded-md font-medium text-sm ${
+                    copyleaksScanning || !sourceText
+                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {copyleaksScanning ? 'Scanning...' : 'Run Copyleaks Scan'}
+                </button>
+                
+                {copyleaksScanning && (
+                  <div className="text-blue-600 text-sm mt-3">
+                    Scan submitted successfully. Results will appear when analysis is complete.
+                  </div>
+                )}
+                
+                {copyleaksError && (
+                  <div className="text-red-600 text-sm mt-3">
+                    {copyleaksError}
+                  </div>
+                )}
+                
+                {!sourceText && (
+                  <div className="text-yellow-600 text-sm mt-3">
+                    Source text required for scanning
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Copyleaks Scan Results */}
+          {copyleaksResults && (
+            <div className="mt-6">
+              <CopyleaksResults 
+                sourceResult={copyleaksResults.sourceResult}
+                finalResult={copyleaksResults.finalResult}
+              />
             </div>
           )}
 
