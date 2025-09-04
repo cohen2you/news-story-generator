@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 interface CopyleaksResultsProps {
   sourceResult?: ScanResult;
@@ -21,14 +21,19 @@ interface ScanResult {
     relatedMeaningWords: number;
     totalWords: number;
     similarityPercentage: number;
+    matchedText?: string;
+    sourceText?: string;
+    detailedFetched?: boolean;
   }>;
   totalMatchedWords: number;
   totalWords: number;
   overallSimilarityPercentage: number;
   timestamp: string;
+  hasDetailedText?: boolean;
 }
 
 export default function CopyleaksResults({ sourceResult, finalResult, onClose }: CopyleaksResultsProps) {
+  const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set());
 
   // Component only displays results - no polling needed
   // Results are fetched externally and passed in when scan is complete
@@ -37,6 +42,16 @@ export default function CopyleaksResults({ sourceResult, finalResult, onClose }:
     // This function is called by the refresh button
     // The actual fetching is handled by the parent component
     window.location.reload();
+  };
+
+  const toggleMatchExpansion = (matchKey: string) => {
+    const newExpanded = new Set(expandedMatches);
+    if (newExpanded.has(matchKey)) {
+      newExpanded.delete(matchKey);
+    } else {
+      newExpanded.add(matchKey);
+    }
+    setExpandedMatches(newExpanded);
   };
 
   const calculateSimilarityPercentage = (result: ScanResult) => {
@@ -161,25 +176,97 @@ export default function CopyleaksResults({ sourceResult, finalResult, onClose }:
       {(sourceResult?.plagiarismResults?.length || finalResult?.plagiarismResults?.length) && (
         <div className="mt-6">
           <h3 className="font-semibold text-lg mb-3">Plagiarism Matches</h3>
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {sourceResult?.plagiarismResults?.map((result, index) => (
-              <div key={`source-${index}`} className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50">
-                <p className="font-medium text-sm">{result.title}</p>
-                <p className="text-xs text-gray-600">{result.url}</p>
-                <p className="text-xs text-gray-500">
-                  {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
-                </p>
-              </div>
-            ))}
-            {finalResult?.plagiarismResults?.map((result, index) => (
-              <div key={`final-${index}`} className="border-l-4 border-green-500 pl-3 py-2 bg-green-50">
-                <p className="font-medium text-sm">{result.title}</p>
-                <p className="text-xs text-gray-600">{result.url}</p>
-                <p className="text-xs text-gray-500">
-                  {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
-                </p>
-              </div>
-            ))}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {sourceResult?.plagiarismResults?.map((result, index) => {
+              const matchKey = `source-${result.resultId}`;
+              const isExpanded = expandedMatches.has(matchKey);
+              return (
+                <div key={`source-${index}`} className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{result.title}</p>
+                      <p className="text-xs text-gray-600">{result.url}</p>
+                      <p className="text-xs text-gray-500">
+                        {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
+                      </p>
+                    </div>
+                    {result.detailedFetched && (
+                      <button
+                        onClick={() => toggleMatchExpansion(matchKey)}
+                        className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
+                      >
+                        {isExpanded ? 'Hide Details' : 'Show Details'}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {isExpanded && result.matchedText && result.sourceText && (
+                    <div className="mt-3 border-t border-blue-200 pt-3">
+                      <h4 className="font-medium text-sm mb-2">Text Comparison:</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <p className="font-medium text-blue-700 mb-1">Your Article:</p>
+                          <div className="bg-white p-2 rounded border max-h-32 overflow-y-auto">
+                            <p className="whitespace-pre-wrap">{result.matchedText}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="font-medium text-blue-700 mb-1">Source Article:</p>
+                          <div className="bg-white p-2 rounded border max-h-32 overflow-y-auto">
+                            <p className="whitespace-pre-wrap">{result.sourceText}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {finalResult?.plagiarismResults?.map((result, index) => {
+              const matchKey = `final-${result.resultId}`;
+              const isExpanded = expandedMatches.has(matchKey);
+              return (
+                <div key={`final-${index}`} className="border-l-4 border-green-500 pl-3 py-2 bg-green-50">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{result.title}</p>
+                      <p className="text-xs text-gray-600">{result.url}</p>
+                      <p className="text-xs text-gray-500">
+                        {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
+                      </p>
+                    </div>
+                    {result.detailedFetched && (
+                      <button
+                        onClick={() => toggleMatchExpansion(matchKey)}
+                        className="ml-2 text-green-600 hover:text-green-800 text-xs"
+                      >
+                        {isExpanded ? 'Hide Details' : 'Show Details'}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {isExpanded && result.matchedText && result.sourceText && (
+                    <div className="mt-3 border-t border-green-200 pt-3">
+                      <h4 className="font-medium text-sm mb-2">Text Comparison:</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <p className="font-medium text-green-700 mb-1">Your Article:</p>
+                          <div className="bg-white p-2 rounded border max-h-32 overflow-y-auto">
+                            <p className="whitespace-pre-wrap">{result.matchedText}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="font-medium text-green-700 mb-1">Source Article:</p>
+                          <div className="bg-white p-2 rounded border max-h-32 overflow-y-auto">
+                            <p className="whitespace-pre-wrap">{result.sourceText}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
