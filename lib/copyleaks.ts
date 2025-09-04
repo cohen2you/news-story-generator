@@ -293,6 +293,51 @@ class CopyleaksService {
     return await response.json();
   }
 
+  async requestExport(scanId: string): Promise<any> {
+    const token = await this.authenticate();
+    const exportId = `export-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const webhookUrl = process.env.COPYLEAKS_WEBHOOK_URL || 'https://news-story-generator.onrender.com';
+    
+    const requestBody = {
+      webhooks: {
+        completed: `${webhookUrl}/api/copyleaks/export/${scanId}/completed`,
+        source: `${webhookUrl}/api/copyleaks/export/${scanId}/source`,
+        results: `${webhookUrl}/api/copyleaks/export/${scanId}/results/{resultId}`,
+      },
+      format: 'json',
+    };
+
+    console.log('Requesting export for scanId:', scanId);
+    console.log('Export request body:', JSON.stringify(requestBody, null, 2));
+
+    const response = await fetch(`https://api.copyleaks.com/v3/downloads/${scanId}/export/${exportId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log('Export request response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Export request error response:', errorText);
+      throw new Error(`Failed to request export: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    console.log('Export request successful:', responseData);
+
+    return {
+      exportId,
+      scanId,
+      status: 'requested',
+    };
+  }
+
   async compareArticles(sourceArticle: string, finalArticle: string): Promise<{
     sourceScanId: string;
     finalScanId: string;

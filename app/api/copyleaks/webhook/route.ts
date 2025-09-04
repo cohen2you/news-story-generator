@@ -5,45 +5,44 @@ import CopyleaksService, { CopyleaksWebhookData } from '@/lib/copyleaks';
 const scanResults = new Map<string, any>();
 const resultDetails = new Map<string, any>();
 
-// Function to fetch detailed results for each match
-async function fetchDetailedResults(scanId: string, internetResults: any[]) {
+// Function to request export for detailed text segments
+async function requestExport(scanId: string) {
   if (!process.env.COPYLEAKS_API_KEY) {
-    console.log('Copyleaks API key not configured, skipping detailed result fetching');
+    console.log('Copyleaks API key not configured, skipping export request');
     return;
   }
 
   const copyleaksService = new CopyleaksService(process.env.COPYLEAKS_API_KEY);
   
-  console.log(`Fetching detailed results for ${internetResults.length} matches...`);
-  
-  for (const result of internetResults) {
-    try {
-      console.log(`Fetching detailed result for ${scanId} - ${result.id}`);
-      const detailedResult = await copyleaksService.getDetailedResult(scanId, result.id);
-      
-      // Update the stored result with detailed text
-      const resultKey = `${scanId}-${result.id}`;
-      const existingResult = resultDetails.get(resultKey);
-      
-      if (existingResult) {
-        resultDetails.set(resultKey, {
-          ...existingResult,
-          matchedText: detailedResult.matchedText,
-          sourceText: detailedResult.sourceText,
-          detailedFetched: true,
-          detailedFetchTime: new Date().toISOString(),
-        });
-        
-        console.log(`Detailed result fetched for ${result.id}: ${detailedResult.matchedText?.length || 0} chars matched, ${detailedResult.sourceText?.length || 0} chars source`);
-      }
-      
-    } catch (error: any) {
-      console.error(`Failed to fetch detailed result for ${result.id}:`, error.message);
-      // Continue with other results even if one fails
-    }
+  try {
+    console.log(`Requesting export for scanId: ${scanId}`);
+    const exportResult = await copyleaksService.requestExport(scanId);
+    console.log('Export requested successfully:', exportResult);
+  } catch (error: any) {
+    console.error(`Failed to request export for ${scanId}:`, error.message);
   }
-  
-  console.log('Detailed result fetching completed');
+}
+
+// Function to check for exported data
+async function checkForExportedData(scanId: string): Promise<boolean> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    
+    // Check if we have completed export data
+    const completedResponse = await fetch(`${baseUrl}/api/copyleaks/export/${scanId}/completed`);
+    if (completedResponse.ok) {
+      const completedData = await completedResponse.json();
+      if (completedData.status !== 'not_found') {
+        console.log(`Found exported data for scanId: ${scanId}`);
+        return true;
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error(`Error checking for exported data for ${scanId}:`, error);
+    return false;
+  }
 }
 
 export async function POST(request: Request) {
@@ -107,8 +106,8 @@ export async function POST(request: Request) {
       console.log('Scan completed for:', scanId, 'with', internetResults.length, 'results');
       console.log('Overall score:', score?.aggregatedScore || 0, '%');
 
-      // Fetch detailed results for each match
-      await fetchDetailedResults(scanId, internetResults);
+      // Request export to get detailed text segments
+      await requestExport(scanId);
 
     } else {
       // No results found
@@ -188,6 +187,9 @@ export async function GET(request: Request) {
       const totalWords = scanResult.totalWords || 1000; // Default estimate if not available
       const overallSimilarityPercentage = totalWords > 0 ? Math.round((totalMatchedWords / totalWords) * 100) : 0;
 
+      // Check for exported data
+      const hasExportedData = await checkForExportedData(scanId);
+
       return NextResponse.json({
         ...scanResult,
         plagiarismResults: allResults,
@@ -195,6 +197,7 @@ export async function GET(request: Request) {
         totalWords,
         overallSimilarityPercentage,
         hasDetailedText: allResults.some(result => result.detailedFetched),
+        hasExportedData,
       });
     }
 

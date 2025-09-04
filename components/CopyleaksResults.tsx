@@ -54,6 +54,19 @@ export default function CopyleaksResults({ sourceResult, finalResult, onClose }:
     setExpandedMatches(newExpanded);
   };
 
+  const fetchExportedData = async (scanId: string, resultId: string) => {
+    try {
+      const response = await fetch(`/api/copyleaks/export-data?scanId=${scanId}&resultId=${resultId}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching exported data:', error);
+    }
+    return null;
+  };
+
   const calculateSimilarityPercentage = (result: ScanResult) => {
     return result.overallSimilarityPercentage || 0;
   };
@@ -190,7 +203,7 @@ export default function CopyleaksResults({ sourceResult, finalResult, onClose }:
                         {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
                       </p>
                     </div>
-                    {result.detailedFetched && (
+                    {(result.detailedFetched || sourceResult?.hasExportedData) && (
                       <button
                         onClick={() => toggleMatchExpansion(matchKey)}
                         className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
@@ -235,7 +248,7 @@ export default function CopyleaksResults({ sourceResult, finalResult, onClose }:
                         {result.matchedWords} matched words ({result.identicalWords} identical) - {result.similarityPercentage}% similarity
                       </p>
                     </div>
-                    {result.detailedFetched && (
+                    {(result.detailedFetched || finalResult?.hasExportedData) && (
                       <button
                         onClick={() => toggleMatchExpansion(matchKey)}
                         className="ml-2 text-green-600 hover:text-green-800 text-xs"
