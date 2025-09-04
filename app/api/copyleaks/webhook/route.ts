@@ -15,11 +15,12 @@ async function requestExport(scanId: string) {
   const copyleaksService = new CopyleaksService(process.env.COPYLEAKS_API_KEY);
   
   try {
-    console.log(`Requesting export for scanId: ${scanId}`);
+    console.log(`=== REQUESTING EXPORT FOR SCANID: ${scanId} ===`);
     const exportResult = await copyleaksService.requestExport(scanId);
-    console.log('Export requested successfully:', exportResult);
+    console.log('=== EXPORT REQUESTED SUCCESSFULLY ===', exportResult);
   } catch (error: any) {
-    console.error(`Failed to request export for ${scanId}:`, error.message);
+    console.error(`=== FAILED TO REQUEST EXPORT FOR ${scanId} ===`, error.message);
+    console.error('Full error:', error);
   }
 }
 
@@ -107,7 +108,9 @@ export async function POST(request: Request) {
       console.log('Overall score:', score?.aggregatedScore || 0, '%');
 
       // Request export to get detailed text segments
+      console.log('=== ABOUT TO REQUEST EXPORT ===');
       await requestExport(scanId);
+      console.log('=== EXPORT REQUEST COMPLETED ===');
 
     } else {
       // No results found
