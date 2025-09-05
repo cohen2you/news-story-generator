@@ -25,10 +25,22 @@ export default function ArticleComparison({
   const [showAdded, setShowAdded] = useState(true);
   const [showRemoved, setShowRemoved] = useState(true);
 
+  // Clean text by removing HTML tags and normalizing whitespace
+  const cleanText = (text: string): string => {
+    return text
+      .replace(/<[^>]*>/g, ' ') // Remove HTML tags
+      .replace(/&[^;]+;/g, ' ') // Remove HTML entities
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+  };
+
   // Simple word-by-word comparison
   const createComparison = (source: string, final: string): TextSegment[] => {
-    const sourceWords = source.split(/(\s+)/);
-    const finalWords = final.split(/(\s+)/);
+    const cleanSource = cleanText(source);
+    const cleanFinal = cleanText(final);
+    
+    const sourceWords = cleanSource.split(/(\s+)/);
+    const finalWords = cleanFinal.split(/(\s+)/);
     const segments: TextSegment[] = [];
     
     let sourceIndex = 0;
@@ -136,15 +148,15 @@ export default function ArticleComparison({
   const getSegmentStyle = (type: string) => {
     switch (type) {
       case 'identical':
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-50 text-gray-700 px-1 py-0.5 rounded';
       case 'modified':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded';
       case 'added':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-100 text-green-800 px-1 py-0.5 rounded';
       case 'removed':
-        return 'bg-red-100 text-red-800 line-through';
+        return 'bg-red-100 text-red-800 line-through px-1 py-0.5 rounded';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-50 text-gray-700 px-1 py-0.5 rounded';
     }
   };
 
@@ -242,32 +254,20 @@ export default function ArticleComparison({
         {/* Source Article */}
         <div className="border rounded-lg p-4">
           <h3 className="font-semibold text-lg mb-3 text-blue-600">{sourceTitle}</h3>
-          <div className="text-sm space-y-1 max-h-96 overflow-y-auto">
-            {filteredSegments.map((segment, index) => (
-              <span
-                key={index}
-                className={`inline-block px-1 py-0.5 rounded text-xs ${getSegmentStyle(segment.type)}`}
-                title={`${getSegmentIcon(segment.type)} ${segment.type}`}
-              >
-                {segment.text}
-              </span>
-            ))}
+          <div className="text-sm leading-relaxed max-h-96 overflow-y-auto">
+            <div className="whitespace-pre-wrap">
+              {cleanText(sourceText)}
+            </div>
           </div>
         </div>
 
         {/* Final Article */}
         <div className="border rounded-lg p-4">
           <h3 className="font-semibold text-lg mb-3 text-green-600">{finalTitle}</h3>
-          <div className="text-sm space-y-1 max-h-96 overflow-y-auto">
-            {filteredSegments.map((segment, index) => (
-              <span
-                key={index}
-                className={`inline-block px-1 py-0.5 rounded text-xs ${getSegmentStyle(segment.type)}`}
-                title={`${getSegmentIcon(segment.type)} ${segment.type}`}
-              >
-                {segment.text}
-              </span>
-            ))}
+          <div className="text-sm leading-relaxed max-h-96 overflow-y-auto">
+            <div className="whitespace-pre-wrap">
+              {cleanText(finalText)}
+            </div>
           </div>
         </div>
       </div>

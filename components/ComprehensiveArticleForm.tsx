@@ -24,6 +24,7 @@ export default function ComprehensiveArticleForm({ onArticleGenerated }: Compreh
   const [ctaText, setCtaText] = useState('');
   const [subheadTexts, setSubheadTexts] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -320,9 +321,38 @@ While Trump announced on July 14 that he would sign off on "severe tariffs" agai
           )}
 
 
-          {/* Article Comparison */}
-          {sourceText && article && (
+          {/* Article Comparison Button */}
+          {sourceText && article && !showComparison && (
             <div className="mt-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                  Article Comparison
+                </h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  Compare your source material with the generated article to see what changed.
+                </p>
+                <button
+                  onClick={() => setShowComparison(true)}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-md font-medium text-sm hover:bg-blue-700"
+                >
+                  Compare Articles
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Article Comparison */}
+          {sourceText && article && showComparison && (
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Article Comparison</h3>
+                <button
+                  onClick={() => setShowComparison(false)}
+                  className="text-gray-500 hover:text-gray-700 text-sm"
+                >
+                  Hide Comparison
+                </button>
+              </div>
               <ArticleComparison 
                 sourceText={sourceText}
                 finalText={article}

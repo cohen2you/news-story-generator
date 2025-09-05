@@ -49,6 +49,7 @@ export default function PRStoryGeneratorPage() {
   const [copiedSubheads, setCopiedSubheads] = useState(false);
   const [includeCTA, setIncludeCTA] = useState(false);
   const [includeSubheads, setIncludeSubheads] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
 
   const [loadingContext, setLoadingContext] = useState(false);
@@ -2231,9 +2232,81 @@ export default function PRStoryGeneratorPage() {
                   )}
 
 
-        {/* Article Comparison */}
-        {primaryText && article && (
+        {/* Article Comparison Button */}
+        {primaryText && article && !showComparison && (
           <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+            <div style={{ 
+              backgroundColor: '#f8fafc', 
+              border: '1px solid #e2e8f0', 
+              borderRadius: '8px', 
+              padding: '20px',
+              textAlign: 'center'
+            }}>
+              <h3 style={{ 
+                marginTop: 0, 
+                marginBottom: 16, 
+                fontSize: 18, 
+                fontWeight: 'bold',
+                color: '#1e293b'
+              }}>
+                Article Comparison
+              </h3>
+              <p style={{ 
+                marginBottom: 16, 
+                color: '#64748b',
+                fontSize: 14
+              }}>
+                Compare your source material with the generated article to see what changed.
+              </p>
+              <button
+                onClick={() => setShowComparison(true)}
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '12px 24px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Compare Articles
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Article Comparison */}
+        {primaryText && article && showComparison && (
+          <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '16px' 
+            }}>
+              <h3 style={{ 
+                margin: 0, 
+                fontSize: 18, 
+                fontWeight: 'bold',
+                color: '#1e293b'
+              }}>
+                Article Comparison
+              </h3>
+              <button
+                onClick={() => setShowComparison(false)}
+                style={{
+                  color: '#6b7280',
+                  fontSize: '14px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Hide Comparison
+              </button>
+            </div>
             <ArticleComparison 
               sourceText={primaryText}
               finalText={article}
