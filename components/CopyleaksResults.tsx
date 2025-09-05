@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
+import SideBySideComparison from './SideBySideComparison';
 
 interface CopyleaksResultsProps {
   sourceResult?: ScanResult;
   finalResult?: ScanResult;
+  sourceText?: string;
+  finalText?: string;
   onClose?: () => void;
 }
 
@@ -33,7 +36,7 @@ interface ScanResult {
   hasExportedData?: boolean;
 }
 
-export default function CopyleaksResults({ sourceResult, finalResult, onClose }: CopyleaksResultsProps) {
+export default function CopyleaksResults({ sourceResult, finalResult, sourceText, finalText, onClose }: CopyleaksResultsProps) {
   const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set());
 
   // Component only displays results - no polling needed
@@ -282,6 +285,18 @@ export default function CopyleaksResults({ sourceResult, finalResult, onClose }:
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Side-by-Side Article Comparison */}
+      {sourceText && finalText && (
+        <div className="mt-8">
+          <SideBySideComparison
+            sourceText={sourceText}
+            finalText={finalText}
+            sourceTitle="Source Article"
+            finalTitle="Final Article"
+          />
         </div>
       )}
 

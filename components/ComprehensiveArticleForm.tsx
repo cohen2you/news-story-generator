@@ -508,6 +508,8 @@ While Trump announced on July 14 that he would sign off on "severe tariffs" agai
               <CopyleaksResults 
                 sourceResult={copyleaksResults.sourceResult}
                 finalResult={copyleaksResults.finalResult}
+                sourceText={sourceText}
+                finalText={article}
               />
             </div>
           )}

@@ -2453,6 +2453,8 @@ export default function PRStoryGeneratorPage() {
             <CopyleaksResults 
               sourceResult={copyleaksResults.sourceResult}
               finalResult={copyleaksResults.finalResult}
+              sourceText={primaryText}
+              finalText={article}
             />
           </div>
         )}
