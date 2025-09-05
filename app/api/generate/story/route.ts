@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { MODEL_CONFIG, generateTopicUrl, shouldLinkToTopic } from '../../../../lib/api';
-import CopyleaksService from '@/lib/copyleaks';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
