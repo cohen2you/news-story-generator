@@ -289,7 +289,7 @@ export default function CopyleaksResults({ sourceResult, finalResult, sourceText
       )}
 
       {/* Side-by-Side Article Comparison */}
-      {sourceText && finalText && (
+      {sourceText && finalText ? (
         <div className="mt-8">
           <SideBySideComparison
             sourceText={sourceText}
@@ -297,6 +297,14 @@ export default function CopyleaksResults({ sourceResult, finalResult, sourceText
             sourceTitle="Source Article"
             finalTitle="Final Article"
           />
+        </div>
+      ) : (
+        <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-yellow-800 text-sm">
+            <strong>Debug:</strong> Side-by-side comparison not available. 
+            Source text: {sourceText ? `${sourceText.length} characters` : 'missing'}, 
+            Final text: {finalText ? `${finalText.length} characters` : 'missing'}
+          </p>
         </div>
       )}
 
