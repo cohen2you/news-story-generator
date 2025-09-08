@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
     // If no landing pages generated, create fallback options
     if (landingPages.length === 0) {
-      const fallbackTerms = ['market news', 'stock market', 'financial news', 'earnings', 'analyst ratings'];
+      const fallbackTerms = ['financial news', 'earnings', 'analyst ratings'];
       for (const term of fallbackTerms) {
         if (landingPages.length < 5) {
           landingPages.push({
@@ -316,11 +316,6 @@ async function generateLandingPageForTerm(searchTerm: string): Promise<any> {
       headline: 'Earnings Reports and Analysis',
       title: 'Corporate Earnings News and Analysis'
     },
-    'stock market': {
-      url: 'https://www.benzinga.com/markets',
-      headline: 'Stock Market News and Analysis',
-      title: 'Market Updates and Trading Analysis'
-    },
     'federal reserve': {
       url: 'https://www.benzinga.com/topic/federal-reserve',
       headline: 'Federal Reserve News and Analysis',
@@ -561,11 +556,6 @@ async function generateLandingPageForTerm(searchTerm: string): Promise<any> {
       headline: 'After-Hours Trading News',
       title: 'Extended Hours Market Analysis'
     },
-    'market movers': {
-      url: 'https://www.benzinga.com/markets',
-      headline: 'Market Movers and Trading Analysis',
-      title: 'Stock Market News and Analysis'
-    },
     'insider trading': {
       url: 'https://www.benzinga.com/insider-trades',
       headline: 'Insider Trading Activity',
@@ -789,7 +779,7 @@ function extractEnhancedSearchTermsFromLead(leadParagraph: string): string[] {
     'electric vehicle', 'autonomous driving', 'self-driving cars',
     'cybersecurity', 'data encryption', 'end-to-end encryption',
     'earnings report', 'revenue growth', 'profit margin',
-    'stock market', 'market volatility', 'trading volume',
+    'market volatility', 'trading volume',
     'federal reserve', 'interest rates', 'monetary policy',
     'inflation data', 'consumer price index', 'economic growth',
     'government policy', 'regulatory approval', 'legal action',
