@@ -155,17 +155,26 @@ export async function POST(req: Request) {
     if (text.length < 200) {
       console.log('Text too short, trying aggressive content extraction');
       
-      // Look for the actual article content in the original HTML
+      // Look for the actual article content in the original HTML using more generic patterns
       const aggressivePatterns = [
-        /Xpeng plans to launch its mass-market Mona brand[\s\S]*?(?:<footer|<\/body|<\/html|$)/i,
-        /CEO He Xiaopeng told CNBC[\s\S]*?(?:<footer|<\/body|<\/html|$)/i,
-        /These new cars could ramp up competition[\s\S]*?(?:<footer|<\/body|<\/html|$)/i
+        // Look for content after the headline
+        /<h1[^>]*>([^<]*)<\/h1>[\s\S]*?(?:<footer|<\/body|<\/html|$)/i,
+        // Look for content in article tags
+        /<article[^>]*>([\s\S]*?)<\/article>/i,
+        // Look for content in main content divs
+        /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+        // Look for content after "Published" or "Updated"
+        /(?:Published|Updated)[\s\S]*?([\s\S]*?)(?:<footer|<\/body|<\/html|$)/i,
+        // Look for content with multiple paragraphs
+        /(<p[^>]*>[\s\S]*?<\/p>){3,}/i,
+        // Look for content after "Key Points" or similar
+        /(?:Key Points|Summary|Overview)[\s\S]*?([\s\S]*?)(?:<footer|<\/body|<\/html|$)/i
       ];
       
       for (const pattern of aggressivePatterns) {
         const match = html.match(pattern);
-        if (match && match[0]) {
-          text = match[0]
+        if (match && match[1]) {
+          text = match[1]
             .replace(/<[^>]+>/g, ' ')
             .replace(/\s+/g, ' ')
             .replace(/&nbsp;/g, ' ')
@@ -177,6 +186,40 @@ export async function POST(req: Request) {
             .trim();
           console.log(`Found content using aggressive pattern: ${pattern}`);
           break;
+        }
+      }
+      
+      // If still no good content, try to extract from the main content area more aggressively
+      if (text.length < 200) {
+        console.log('Still no good content, trying main content extraction');
+        
+        // Extract everything from the main content and clean it more aggressively
+        const mainContentMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+        if (mainContentMatch && mainContentMatch[1]) {
+          const mainContent = mainContentMatch[1];
+          
+          // Remove navigation, ads, and other non-content elements
+          const cleanedMain = mainContent
+            .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+            .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+            .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+            .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#x27;/g, "'")
+            .trim();
+          
+          if (cleanedMain.length > 200) {
+            text = cleanedMain;
+            console.log(`Found content using main content extraction: ${cleanedMain.length} chars`);
+          }
         }
       }
     }
