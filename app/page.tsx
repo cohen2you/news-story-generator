@@ -225,7 +225,7 @@ Return the complete article with only the problematic sentences rewritten, keepi
   // Function to render text with color-coded highlighted segments
   const renderTextWithHighlights = (text: string, segments: Array<{start: number, end: number, words: string[], color: string}>) => {
     // For now, let's use a simpler approach - find the actual text segments in the article
-    const result: JSX.Element[] = [];
+    const result: React.ReactElement[] = [];
     let lastIndex = 0;
     
     // Sort segments by start position
