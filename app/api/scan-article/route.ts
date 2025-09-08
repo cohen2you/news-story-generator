@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       .replace(/\s+/g, ' ')
       .trim();
     
-    const words = cleanText.split(' ').filter(word => word.length > 0);
+    const words = cleanText.split(' ').filter((word: string) => word.length > 0);
     
     console.log(`Article has ${words.length} words`);
     console.log('First 20 words:', words.slice(0, 20));
