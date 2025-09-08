@@ -233,7 +233,7 @@ async function generateLandingPageForTerm(searchTerm: string): Promise<any> {
       title: 'Microsoft Corporation Stock Analysis and News'
     },
     'nvidia': {
-      url: 'https://www.benzinga.com/quote/NVDA',
+      url: 'https://www.benzinga.com/topic/nvidia',
       headline: 'NVIDIA Corporation (NVDA) Stock News',
       title: 'NVIDIA Corporation Stock Analysis and News'
     },
@@ -757,10 +757,29 @@ function extractEnhancedSearchTermsFromLead(leadParagraph: string): string[] {
     }
   });
   
-  // Extract ticker symbols
+  // Extract ticker symbols and convert to company names
   const tickerMatch = cleanText.match(/nasdaq:\s*([a-z]+)/i);
   if (tickerMatch) {
-    searchTerms.push(tickerMatch[1].toUpperCase());
+    const ticker = tickerMatch[1].toUpperCase();
+    // Convert ticker to company name for better landing page URLs
+    const tickerToCompany: { [key: string]: string } = {
+      'NVDA': 'nvidia',
+      'AAPL': 'apple',
+      'TSLA': 'tesla',
+      'AMZN': 'amazon',
+      'MSFT': 'microsoft',
+      'GOOGL': 'alphabet',
+      'META': 'meta',
+      'NFLX': 'netflix',
+      'GM': 'general motors',
+      'F': 'ford motor',
+      'PFE': 'pfizer',
+      'LLY': 'eli lilly',
+      'NVO': 'novo nordisk'
+    };
+    
+    const companyName = tickerToCompany[ticker] || ticker.toLowerCase();
+    searchTerms.push(companyName);
   }
   
   // Enhanced multiword business and financial terms
