@@ -280,10 +280,13 @@ function buildComprehensivePrompt(
   
   return `You are a professional financial news writer for Benzinga. Create a comprehensive financial news article based on the provided source material.
 
+CRITICAL QUOTE REQUIREMENT: 
+You MUST include at least one direct quote from the source material. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY and takes priority over other instructions.
+
 TASK: Transform the source article into a financial news piece that:
 1. Reports the key news event from the source (start with the news, not market data)
-2. Avoids plagiarism by rewriting in original language
-3. Includes direct quotes when appropriate
+2. CRITICAL: Avoids plagiarism by completely rewriting all content in original language - do not copy 4+ consecutive words from the source
+3. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes for better authenticity and credibility. Look for quotes that contain quotation marks in the source text and use them exactly as written.
 4. Adds intelligent market context based on the story's implications
 5. Provides relevant financial analysis and broader market impact
 
@@ -315,8 +318,13 @@ WRITING GUIDELINES:
 - START WITH THE NEWS STORY, not market data
 - NEVER begin with ticker movements like "[TICKER] traded lower" or "[TICKER] is slipping"
 - Start with the actual news event from the source material
-- Use direct quotes from the source when appropriate (use quotation marks)
-- Rewrite information in your own words to avoid plagiarism
+- MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes for better authenticity and credibility. Look for text in the source that is already in quotation marks and use those exact quotes.
+- CRITICAL PLAGIARISM PREVENTION: 
+  * Do NOT copy 4 or more consecutive words from the source material
+  * Completely rewrite all information in your own words and sentence structure
+  * Use synonyms, different phrasing, and alternative sentence constructions
+  * Paraphrase all content while maintaining accuracy and meaning
+  * EXCEPTION: Direct quotes in quotation marks are allowed and encouraged - use them exactly as written
 - Include market context only after establishing the news event
 - Reference specific stocks, indices, or market movements only if highly relevant
 - Keep paragraphs short (2-3 sentences max)
@@ -339,11 +347,25 @@ EXAMPLE STRUCTURE:
 4. Related market developments
 5. Market impact summary
 
+QUOTE INCLUSION EXAMPLES:
+If the source contains: "In 2026 you can expect a variety of Mona products launched into the Chinese and European markets," He said.
+Your article should include: "In 2026 you can expect a variety of Mona products launched into the Chinese and European markets," He said.
+
+If the source contains: "I think if we have the opportunity then we want to acquire some companies," He said.
+Your article should include: "I think if we have the opportunity then we want to acquire some companies," He said.
+
 CORRECT EXAMPLE LEAD:
 "Federal Reserve Governor Adriana Kugler resigned on Friday, creating a vacancy on the Federal Reserve's Board of Governors at a pivotal time for monetary policy."
 
 INCORRECT EXAMPLE LEAD:
 "SPDR S&P 500 ETF (NYSE: SPY) traded lower on Friday following the resignation of Federal Reserve Governor Adriana Kugler."
+
+PLAGIARISM PREVENTION EXAMPLES:
+GOOD (Original): "Kugler stepped down from her position at the central bank, leaving her role months before her term was scheduled to end."
+BAD (Copied): "Kugler resigned from the Federal Reserve Board months before her term was set to expire."
+
+GOOD (Original): "The central bank announced that Kugler would return to her academic position at Georgetown University."
+BAD (Copied): "The Federal Reserve announced that Kugler would return to Georgetown University as a professor."
 
 Generate a comprehensive article that prioritizes the news story while adding intelligent financial context.`;
 }

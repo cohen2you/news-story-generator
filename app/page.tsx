@@ -5,7 +5,6 @@ import LocalDate from '../components/LocalDate';
 import AnalystNoteUpload from '../components/AnalystNoteUpload';
 import EnhancedContextForm from '../components/EnhancedContextForm';
 import EditorialReviewForm from '../components/EditorialReviewForm';
-import ArticleComparison from '../components/ArticleComparison';
 
 
 
@@ -49,7 +48,237 @@ export default function PRStoryGeneratorPage() {
   const [copiedSubheads, setCopiedSubheads] = useState(false);
   const [includeCTA, setIncludeCTA] = useState(false);
   const [includeSubheads, setIncludeSubheads] = useState(false);
-  const [showComparison, setShowComparison] = useState(false);
+  const [showArticleComparison, setShowArticleComparison] = useState(false);
+  const [comparisonSegments, setComparisonSegments] = useState<Array<{start: number, end: number, words: string[], color: string}>>([]);
+  const [loadingComparison, setLoadingComparison] = useState(false);
+  const [loadingReword, setLoadingReword] = useState(false);
+
+  // Function to compare articles using OpenAI
+  const compareArticles = async () => {
+    setLoadingComparison(true);
+    try {
+      console.log('Starting article comparison with OpenAI...');
+      console.log('Source text length:', primaryText.length);
+      console.log('Generated text length:', article.length);
+      
+      const response = await fetch('/api/compare-articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sourceText: primaryText,
+          generatedText: article.replace(/<[^>]*>/g, '')
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to compare articles');
+      }
+
+      console.log(`OpenAI found ${data.segments.length} matches`);
+
+      // Assign colors to segments
+      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'];
+      
+      const coloredSegments = data.segments.map((segment: any, index: number) => ({
+        ...segment,
+        color: colors[index % colors.length]
+      }));
+
+      setComparisonSegments(coloredSegments);
+      
+      console.log(`Comparison complete: ${data.segments.length} matches found and colored`);
+      
+    } catch (error) {
+      console.error('Error running comparison:', error);
+      setComparisonSegments([]);
+    } finally {
+      setLoadingComparison(false);
+    }
+  };
+
+  // Function to compare articles with specific text (for reworded articles)
+  const compareArticlesWithText = async (sourceText: string, generatedText: string) => {
+    setLoadingComparison(true);
+    try {
+      console.log('Starting comparison with reworded text...');
+      console.log('Source text length:', sourceText.length);
+      console.log('Generated text length:', generatedText.length);
+
+      const response = await fetch('/api/compare-articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sourceText: sourceText,
+          generatedText: generatedText.replace(/<[^>]*>/g, '') // Remove HTML tags for comparison
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to compare articles');
+      }
+
+      console.log(`Comparison found ${data.segments.length} matches after rewording`);
+
+      // Assign colors to segments
+      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'];
+      
+      const coloredSegments = data.segments.map((segment: any, index: number) => ({
+        ...segment,
+        color: colors[index % colors.length]
+      }));
+
+      setComparisonSegments(coloredSegments);
+      
+      console.log(`Rescan complete: ${data.segments.length} matches found after rewording`);
+      
+    } catch (error) {
+      console.error('Error running rescan comparison:', error);
+      setComparisonSegments([]);
+    } finally {
+      setLoadingComparison(false);
+    }
+  };
+
+  // Function to reword flagged segments and rescan
+  const handleRewordAndRescan = async () => {
+    setLoadingReword(true);
+    try {
+      console.log('Starting reword and rescan process...');
+      
+      // Create a prompt to reword the flagged segments
+      const flaggedSegments = comparisonSegments.map(segment => segment.words.join(' ')).join(', ');
+      
+      const rewordPrompt = `You are a professional financial journalist and editor. I need you to intelligently reword specific sentences in this article to avoid plagiarism while maintaining perfect grammar, facts, and readability.
+
+FLAGGED PHRASES TO AVOID (these exact word combinations were found in the source):
+${flaggedSegments}
+
+CURRENT ARTICLE:
+${article}
+
+TASK: Identify sentences containing the flagged phrases and rewrite ONLY those sentences intelligently, while keeping the rest of the article unchanged.
+
+INSTRUCTIONS:
+1. Find sentences that contain the flagged phrases
+2. Rewrite ONLY those sentences using different wording and structure
+3. Maintain ALL facts, numbers, dates, and locations exactly as they are
+4. Ensure rewritten sentences are grammatically correct and make logical sense
+5. Keep the same meaning and context
+6. Use professional financial news writing style
+7. CRITICAL: Preserve ALL existing hyperlinks exactly as they are - do not modify, remove, or change any <a href=""> tags
+8. Preserve all HTML formatting including <p>, <strong>, <em> tags
+9. Do not change sentences that don't contain flagged phrases
+10. Focus on natural, flowing language that reads well
+11. MOST IMPORTANT: Preserve ALL direct quotes exactly as they are - do not modify any text within quotation marks
+
+APPROACH:
+- If a sentence contains a flagged phrase, rewrite the entire sentence for coherence
+- Use synonyms and alternative phrasing for the flagged words
+- Maintain the same factual content and meaning
+- Ensure the sentence flows naturally with the surrounding text
+
+Return the complete article with only the problematic sentences rewritten, keeping everything else exactly the same.`;
+
+      const response = await fetch('/api/generate/reword-article', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: rewordPrompt,
+          currentArticle: article
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to reword article');
+      }
+
+      const data = await response.json();
+      console.log('Reword result:', data);
+      
+      if (data.success) {
+        // Update the article with the reworded version
+        setArticle(data.rewordedArticle);
+        console.log('✅ Article updated with reworded content - ready for copy/paste');
+        
+        // Immediately rescan with the reworded article
+        await compareArticlesWithText(primaryText, data.rewordedArticle);
+      } else {
+        console.error('Rewording failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Error rewording article:', error);
+    } finally {
+      setLoadingReword(false);
+    }
+  };
+
+  // Function to render text with color-coded highlighted segments
+  const renderTextWithHighlights = (text: string, segments: Array<{start: number, end: number, words: string[], color: string}>) => {
+    // For now, let's use a simpler approach - find the actual text segments in the article
+    const result: JSX.Element[] = [];
+    let lastIndex = 0;
+    
+    // Sort segments by start position
+    const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
+    
+    sortedSegments.forEach((segment, segmentIndex) => {
+      const segmentText = segment.words.join(' ');
+      
+      // Find this segment in the text
+      const segmentIndexInText = text.indexOf(segmentText);
+      
+      if (segmentIndexInText !== -1) {
+        // Add text before the segment
+        if (segmentIndexInText > lastIndex) {
+          result.push(
+            <span key={`before-${segmentIndex}`}>
+              {text.substring(lastIndex, segmentIndexInText)}
+            </span>
+          );
+        }
+        
+        // Add the highlighted segment
+        result.push(
+          <span 
+            key={`segment-${segmentIndex}`}
+            style={{ 
+              backgroundColor: segment.color + '40',
+              color: segment.color,
+              fontWeight: 'bold',
+              border: `1px solid ${segment.color}`,
+              borderRadius: '2px',
+              padding: '1px 2px'
+            }}
+          >
+            {segmentText}
+          </span>
+        );
+        
+        lastIndex = segmentIndexInText + segmentText.length;
+      }
+    });
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      result.push(
+        <span key="after">
+          {text.substring(lastIndex)}
+        </span>
+      );
+    }
+    
+    return result.length > 0 ? result : <span>{text}</span>;
+  };
 
 
   const [loadingContext, setLoadingContext] = useState(false);
@@ -479,6 +708,9 @@ export default function PRStoryGeneratorPage() {
       const data = await res.json();
       if (!res.ok || !data.story) throw new Error(data.error || 'Failed to generate story');
              setArticle(data.story);
+             // Reset comparison state when generating new article
+             setShowArticleComparison(false);
+             setComparisonSegments([]);
        setPreviouslyUsedContextUrls([]); // Clear previously used context URLs when generating new article
        setLeadHyperlinkArticleIndex(0); // Reset hyperlink article index for new article
        setAddingLeadHyperlink(false); // Reset loading state
@@ -2054,6 +2286,34 @@ export default function PRStoryGeneratorPage() {
                   >
                     {generatingHeadlines ? 'Generating...' : 'Generate Headlines & Key Points'}
                   </button>
+                  {primaryText && article && (
+                    <button
+                      onClick={async () => {
+                        if (!showArticleComparison) {
+                          // Show comparison view and run analysis
+                          setShowArticleComparison(true);
+                          setComparisonSegments([]);
+                          await compareArticles();
+                        } else {
+                          // Hide comparison
+                          setShowArticleComparison(false);
+                          setComparisonSegments([]);
+                        }
+                      }}
+                      disabled={loadingComparison}
+                      style={{ 
+                        padding: '8px 16px', 
+                        background: showArticleComparison ? '#dc2626' : (loadingComparison ? '#6b7280' : '#059669'), 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: 4,
+                        fontSize: 14,
+                        cursor: loadingComparison ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {loadingComparison ? 'Analyzing...' : (showArticleComparison ? 'Hide Comparison' : 'Compare Articles')}
+                    </button>
+                  )}
                </div>
 
         {/* Headlines and Key Points Display */}
@@ -2200,8 +2460,8 @@ export default function PRStoryGeneratorPage() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+            </div>
+          )}
 
           <div
             ref={articleRef}
@@ -2224,95 +2484,143 @@ export default function PRStoryGeneratorPage() {
                     </p>
                   </div>
                 ` : ''
-              ) 
+              )
             }}
-                      />
+          />
           </div>
           
                   )}
 
-
-        {/* Article Comparison Button */}
-        {primaryText && article && !showComparison && (
+        {/* Article Comparison View */}
+        {showArticleComparison && primaryText && article && (
           <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-            <div style={{ 
-              backgroundColor: '#f8fafc', 
-              border: '1px solid #e2e8f0', 
-              borderRadius: '8px', 
-              padding: '20px',
-              textAlign: 'center'
-            }}>
-              <h3 style={{ 
-                marginTop: 0, 
-                marginBottom: 16, 
-                fontSize: 18, 
-                fontWeight: 'bold',
-                color: '#1e293b'
+            {loadingComparison ? (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '40px', 
+                color: '#6b7280',
+                fontSize: '16px'
               }}>
-                Article Comparison
-              </h3>
-              <p style={{ 
-                marginBottom: 16, 
-                color: '#64748b',
-                fontSize: 14
-              }}>
-                Compare your source material with the generated article to see what changed.
-              </p>
-              <button
-                onClick={() => setShowComparison(true)}
-                style={{
-                  backgroundColor: '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '12px 24px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                Compare Articles
-              </button>
-            </div>
-          </div>
-        )}
+                <div style={{ marginBottom: '16px' }}>🤖 AI is analyzing both articles...</div>
+                <div style={{ fontSize: '14px', color: '#9ca3af' }}>
+                  Finding identical text segments using OpenAI
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '20px',
+                  minHeight: '400px'
+                }}>
+                  {/* Source Article Panel */}
+                  <div style={{ 
+                    flex: 1,
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    backgroundColor: '#f8fafc'
+                  }}>
+                    <h3 style={{ 
+                      margin: 0, 
+                      marginBottom: '16px', 
+                      fontSize: '18px', 
+                      fontWeight: 'bold',
+                      color: '#1e293b'
+                    }}>
+                      Source Article
+                    </h3>
+                    <div style={{
+                      fontSize: '14px',
+                      fontFamily: 'Georgia, serif',
+                      lineHeight: '1.6',
+                      whiteSpace: 'pre-wrap',
+                      maxHeight: '500px',
+                      overflowY: 'auto'
+                    }}>
+                      {renderTextWithHighlights(primaryText, comparisonSegments)}
+                    </div>
+                  </div>
 
-        {/* Article Comparison */}
-        {primaryText && article && showComparison && (
-          <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              marginBottom: '16px' 
-            }}>
-              <h3 style={{ 
-                margin: 0, 
-                fontSize: 18, 
-                fontWeight: 'bold',
-                color: '#1e293b'
-              }}>
-                Article Comparison
-              </h3>
-              <button
-                onClick={() => setShowComparison(false)}
-                style={{
-                  color: '#6b7280',
-                  fontSize: '14px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                Hide Comparison
-              </button>
-            </div>
-            <ArticleComparison 
-              sourceText={primaryText}
-              finalText={article}
-              sourceTitle="Source Article"
-              finalTitle="Generated Article"
-            />
+                  {/* Generated Article Panel */}
+                  <div style={{ 
+                    flex: 1,
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    backgroundColor: '#f8fafc'
+                  }}>
+                    <h3 style={{ 
+                      margin: 0, 
+                      marginBottom: '16px', 
+                      fontSize: '18px', 
+                      fontWeight: 'bold',
+                      color: '#1e293b'
+                    }}>
+                      Generated Article
+                    </h3>
+                    <div style={{
+                      fontSize: '14px',
+                      fontFamily: 'Georgia, serif',
+                      lineHeight: '1.6',
+                      whiteSpace: 'pre-wrap',
+                      maxHeight: '500px',
+                      overflowY: 'auto'
+                    }}>
+                      {renderTextWithHighlights(article.replace(/<[^>]*>/g, ''), comparisonSegments)}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Results Summary */}
+                {comparisonSegments.length > 0 && (
+                  <div style={{ 
+                    marginTop: '16px', 
+                    padding: '12px', 
+                    backgroundColor: '#fef2f2', 
+                    border: '1px solid #fecaca', 
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    color: '#991b1b'
+                  }}>
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong>AI Analysis Complete:</strong> Found {comparisonSegments.length} identical text segments highlighted above. 
+                      Each color represents a different matching segment between the articles.
+                    </div>
+                    <button
+                      onClick={handleRewordAndRescan}
+                      disabled={loadingReword}
+                      style={{ 
+                        padding: '8px 16px', 
+                        background: loadingReword ? '#6b7280' : '#dc2626', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        cursor: loadingReword ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {loadingReword ? 'Rewording...' : 'Reword & Rescan'}
+                    </button>
+                  </div>
+                )}
+                
+                {comparisonSegments.length === 0 && !loadingComparison && (
+                  <div style={{ 
+                    marginTop: '16px', 
+                    padding: '12px', 
+                    backgroundColor: '#f0fdf4', 
+                    border: '1px solid #bbf7d0', 
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    color: '#166534'
+                  }}>
+                    <strong>✅ No Plagiarism Detected:</strong> The AI found no identical text segments of 3+ words between the articles.
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
