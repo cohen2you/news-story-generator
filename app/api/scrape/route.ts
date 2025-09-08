@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as cheerio from 'cheerio';
 
 export async function POST(req: Request) {
   try {
@@ -7,6 +8,9 @@ export async function POST(req: Request) {
     if (!url) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 });
     }
+
+    console.log('=== CHEERIO SCRAPER STARTING ===');
+    console.log('URL:', url);
 
     // Fetch the URL content
     const response = await fetch(url, {
@@ -20,246 +24,136 @@ export async function POST(req: Request) {
     }
 
     const html = await response.text();
+    console.log('HTML length:', html.length);
+
+    // Load HTML into cheerio
+    const $ = cheerio.load(html);
     
-    // Try to find article content using common selectors
-    let articleContent = '';
+    // Remove unwanted elements
+    $('script, style, nav, header, footer, aside, .advertisement, .ad, .sidebar, .menu, .navigation').remove();
     
-    // First, try to find the main article content area
-    const mainContentSelectors = [
-      'main',
-      '[role="main"]',
-      '.main-content',
-      '#main-content',
-      '.article-content',
-      '.story-content'
+    let articleText = '';
+    
+    // Try multiple strategies to find article content
+    const strategies = [
+      // Strategy 1: Look for article tag
+      () => {
+        const article = $('article').first();
+        if (article.length) {
+          console.log('Found article tag');
+          return article.text().trim();
+        }
+        return '';
+      },
+      
+      // Strategy 2: Look for main content areas
+      () => {
+        const selectors = [
+          '[role="main"]',
+          '.article-content',
+          '.story-content', 
+          '.post-content',
+          '.entry-content',
+          '.content',
+          '.main-content',
+          '#main-content',
+          '.article-body',
+          '.story-body'
+        ];
+        
+        for (const selector of selectors) {
+          const element = $(selector).first();
+          if (element.length) {
+            console.log(`Found content using selector: ${selector}`);
+            return element.text().trim();
+          }
+        }
+        return '';
+      },
+      
+      // Strategy 3: Look for headline and extract following content
+      () => {
+        const headline = $('h1').first();
+        if (headline.length) {
+          console.log('Found headline:', headline.text().trim());
+          
+          // Find the parent container of the headline
+          let container = headline.parent();
+          while (container.length && container.prop('tagName') !== 'BODY') {
+            // Check if this container has substantial text content
+            const text = container.text().trim();
+            if (text.length > 500) {
+              console.log('Found substantial content in headline container');
+              return text;
+            }
+            container = container.parent();
+          }
+        }
+        return '';
+      },
+      
+      // Strategy 4: Extract all paragraphs and combine
+      () => {
+        const paragraphs = $('p').map((i, el) => $(el).text().trim()).get();
+        const validParagraphs = paragraphs.filter(p => 
+          p.length > 20 && 
+          !p.includes('Skip Navigation') &&
+          !p.includes('SIGN IN') &&
+          !p.includes('Subscribe') &&
+          !p.includes('Newsletter') &&
+          !p.includes('Terms of Use') &&
+          !p.includes('Privacy Policy') &&
+          !p.includes('Data is a real-time snapshot') &&
+          !p.includes('Global Business and Financial News')
+        );
+        
+        if (validParagraphs.length > 0) {
+          console.log(`Found ${validParagraphs.length} valid paragraphs`);
+          return validParagraphs.join(' ');
+        }
+        return '';
+      }
     ];
     
-    for (const selector of mainContentSelectors) {
-      const regex = new RegExp(`<${selector}[^>]*>([\\s\\S]*?)<\\/${selector}>`, 'i');
-      const match = html.match(regex);
-      if (match && match[1]) {
-        // Check if this content is substantial (more than just a headline)
-        const contentLength = match[1].replace(/<[^>]*>/g, '').trim().length;
-        if (contentLength > 200) { // Only use if it has substantial content
-          articleContent = match[1];
-          console.log(`Found substantial main content using selector: ${selector} (${contentLength} chars)`);
-          break;
-        } else {
-          console.log(`Found small main content using selector: ${selector} (${contentLength} chars) - skipping`);
-        }
-      }
-    }
-    
-    // If no main content found, try to find content after the headline
-    if (!articleContent) {
-      // Look for content after the headline and before footer/end
-      const headlineMatch = html.match(/<h1[^>]*>([^<]*)<\/h1>([\s\S]*?)(?:<footer|<\/body|<\/html)/i);
-      if (headlineMatch && headlineMatch[2]) {
-        const contentLength = headlineMatch[2].replace(/<[^>]*>/g, '').trim().length;
-        if (contentLength > 200) {
-          articleContent = headlineMatch[2];
-          console.log(`Found substantial article content after headline (${contentLength} chars)`);
-        } else {
-          console.log(`Found small content after headline (${contentLength} chars) - skipping`);
-        }
-      }
-    }
-    
-    // If still no content found, try to find content after "Key Points" or similar markers
-    if (!articleContent) {
-      const keyPointsMatch = html.match(/Key Points([\s\S]*?)(?:<footer|<\/body|<\/html)/i);
-      if (keyPointsMatch) {
-        const contentLength = keyPointsMatch[1].replace(/<[^>]*>/g, '').trim().length;
-        if (contentLength > 200) {
-          articleContent = keyPointsMatch[1];
-          console.log(`Found substantial article content after "Key Points" marker (${contentLength} chars)`);
-        } else {
-          console.log(`Found small content after "Key Points" (${contentLength} chars) - skipping`);
-        }
-      }
-    }
-    
-    // If still no content found, try to find content after "Published" or "Updated" markers
-    if (!articleContent) {
-      const publishedMatch = html.match(/(?:Published|Updated)[\s\S]*?([\s\S]*?)(?:<footer|<\/body|<\/html)/i);
-      if (publishedMatch && publishedMatch[1]) {
-        const contentLength = publishedMatch[1].replace(/<[^>]*>/g, '').trim().length;
-        if (contentLength > 200) {
-          articleContent = publishedMatch[1];
-          console.log(`Found substantial article content after "Published/Updated" marker (${contentLength} chars)`);
-        }
-      }
-    }
-    
-    // If still no content found, try to find any substantial text content
-    if (!articleContent) {
-      // Look for content with multiple paragraphs
-      const paragraphMatch = html.match(/(<p[^>]*>[\s\S]*?<\/p>){3,}/i);
-      if (paragraphMatch) {
-        articleContent = paragraphMatch[0];
-        console.log('Found article content with multiple paragraphs');
-      }
-    }
-    
-    // If still no content found, fall back to full HTML
-    if (!articleContent) {
-      articleContent = html;
-      console.log('Using full HTML as fallback');
-    }
-    
-    // Try a different approach - look for specific content patterns first
-    let text = '';
-    
-    // First, try to extract content using more specific patterns
-    const contentPatterns = [
-      /Key Points([\s\S]*?)(?:<footer|<\/body|<\/html|$)/i,
-      /<p[^>]*>([^<]*Xpeng[^<]*)<\/p>[\s\S]*?<\/p>/i,
-      /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-      /<article[^>]*>([\s\S]*?)<\/article>/i
-    ];
-    
-    for (const pattern of contentPatterns) {
-      const match = articleContent.match(pattern);
-      if (match && match[1]) {
-        text = match[1];
-        console.log(`Found content using pattern: ${pattern}`);
+    // Try each strategy until we get substantial content
+    for (let i = 0; i < strategies.length; i++) {
+      const content = strategies[i]();
+      if (content.length > 200) {
+        articleText = content;
+        console.log(`Strategy ${i + 1} successful: ${content.length} chars`);
         break;
       }
     }
     
-    // If no pattern worked, fall back to full cleaning
-    if (!text) {
-      console.log('No pattern matched, using full HTML cleaning');
-      text = articleContent
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove styles
-        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '') // Remove navigation
-        .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '') // Remove header
-        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '') // Remove footer
-        .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '') // Remove sidebar
-        .replace(/<[^>]+>/g, ' ') // Remove remaining HTML tags
-        .replace(/\s+/g, ' ') // Normalize whitespace
-        .replace(/&nbsp;/g, ' ') // Replace HTML entities
+    // Clean up the extracted text
+    if (articleText) {
+      articleText = articleText
+        .replace(/\s+/g, ' ')
+        .replace(/&nbsp;/g, ' ')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#x27;/g, "'")
         .trim();
-    }
-
-    console.log(`Text after HTML cleaning: ${text.length} chars`);
-    console.log(`Text preview after HTML cleaning: ${text.substring(0, 200)}`);
-
-    // If we still don't have good content, try a more aggressive approach
-    if (text.length < 200) {
-      console.log('Text too short, trying aggressive content extraction');
       
-      // Look for the actual article content in the original HTML using more generic patterns
-      const aggressivePatterns = [
-        // Look for content after the headline
-        /<h1[^>]*>([^<]*)<\/h1>[\s\S]*?(?:<footer|<\/body|<\/html|$)/i,
-        // Look for content in article tags
-        /<article[^>]*>([\s\S]*?)<\/article>/i,
-        // Look for content in main content divs
-        /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-        // Look for content after "Published" or "Updated"
-        /(?:Published|Updated)[\s\S]*?([\s\S]*?)(?:<footer|<\/body|<\/html|$)/i,
-        // Look for content with multiple paragraphs
-        /(<p[^>]*>[\s\S]*?<\/p>){3,}/i,
-        // Look for content after "Key Points" or similar
-        /(?:Key Points|Summary|Overview)[\s\S]*?([\s\S]*?)(?:<footer|<\/body|<\/html|$)/i
-      ];
-      
-      for (const pattern of aggressivePatterns) {
-        const match = html.match(pattern);
-        if (match && match[1]) {
-          text = match[1]
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
-            .replace(/&#x27;/g, "'")
-            .trim();
-          console.log(`Found content using aggressive pattern: ${pattern}`);
-          break;
-        }
-      }
-      
-      // If still no good content, try to extract from the main content area more aggressively
-      if (text.length < 200) {
-        console.log('Still no good content, trying main content extraction');
-        
-        // Extract everything from the main content and clean it more aggressively
-        const mainContentMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
-        if (mainContentMatch && mainContentMatch[1]) {
-          const mainContent = mainContentMatch[1];
-          
-          // Remove navigation, ads, and other non-content elements
-          const cleanedMain = mainContent
-            .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-            .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-            .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-            .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
-            .replace(/&#x27;/g, "'")
-            .trim();
-          
-          if (cleanedMain.length > 200) {
-            text = cleanedMain;
-            console.log(`Found content using main content extraction: ${cleanedMain.length} chars`);
-          }
-        }
+      // Limit to 10000 characters
+      if (articleText.length > 10000) {
+        articleText = articleText.substring(0, 10000);
       }
     }
     
-    // Find the actual article content by looking for "Key Points" or similar markers
-    let cleanedText = text;
+    console.log('Final extracted text length:', articleText.length);
+    console.log('Text preview:', articleText.substring(0, 200));
     
-    // Try to find content starting from "Key Points"
-    const keyPointsIndex = text.indexOf('Key Points');
-    if (keyPointsIndex !== -1) {
-      cleanedText = text.substring(keyPointsIndex);
-      console.log(`Found Key Points at index ${keyPointsIndex}, using content from there`);
-    } else {
-      // Try to find content starting from the headline
-      const headlineMatch = text.match(/^([^.]*\.)/);
-      if (headlineMatch) {
-        const headlineEnd = headlineMatch[0].length;
-        cleanedText = text.substring(headlineEnd);
-        console.log(`Using content after headline: "${headlineMatch[0]}"`);
-      }
+    if (!articleText || articleText.length < 100) {
+      return NextResponse.json({ error: 'Could not extract article content' }, { status: 400 });
     }
-    
-    // Remove common navigation text patterns (but be more selective)
-    cleanedText = cleanedText
-      .replace(/Skip Navigation[\s\S]*?SIGN IN/g, '') // Remove navigation menus
-      .replace(/Markets Business Investing Tech Politics Video[\s\S]*?Menu/g, '') // Remove menu text
-      .replace(/Subscribe[\s\S]*?Livestream/g, '') // Remove subscription text
-      .replace(/WATCH LIVE[\s\S]*?Key Points/g, 'Key Points') // Remove content between WATCH LIVE and Key Points
-      .replace(/\s+/g, ' ') // Normalize whitespace again
-      .trim();
 
-    // Extract a reasonable amount of text (first 5000 characters)
-    const extractedText = cleanedText.substring(0, 5000);
+    return NextResponse.json({ text: articleText });
     
-    console.log('Extracted text length:', extractedText.length);
-    console.log('Extracted text preview:', extractedText.substring(0, 200));
-
-    return NextResponse.json({ text: extractedText });
   } catch (error: any) {
     console.error('Error scraping URL:', error);
     return NextResponse.json({ error: 'Failed to scrape URL' }, { status: 500 });
   }
-} 
+}
