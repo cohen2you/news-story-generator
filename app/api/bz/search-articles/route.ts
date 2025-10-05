@@ -198,7 +198,15 @@ export async function POST(request: Request) {
               const exactPhrase = searchTerm.toLowerCase();
               return headlineLower.includes(exactPhrase) || bodyLower.includes(exactPhrase);
             }
-            return item.relevanceScore > 0; // Normal threshold for other searches
+            
+            // Different thresholds based on date range for better fallback behavior
+            if (dateRange.days === 30) {
+              // Strict threshold for 30-day search - only high-quality matches
+              return item.relevanceScore > 100;
+            } else {
+              // More lenient threshold for 6-month search - accept reasonable matches
+              return item.relevanceScore > 50;
+            }
           })
           .sort((a, b) => {
             // First sort by date (newest first), then by relevance score
@@ -215,11 +223,14 @@ export async function POST(request: Request) {
           })
           .slice(0, 50);
 
-        console.log(`Found ${matchingArticles.length} relevant articles in ${dateRange.label}`);
+        console.log(`Found ${matchingArticles.length} relevant articles in ${dateRange.label} (threshold: ${dateRange.days === 30 ? '100+' : '50+'})`);
         
         // If we found relevant articles, use this date range
-        if (matchingArticles.length > 0) {
+        // For 30-day search, require minimum 3 articles for good coverage
+        const minArticlesFor30Day = 3;
+        if (matchingArticles.length > 0 && (dateRange.days === 180 || matchingArticles.length >= minArticlesFor30Day)) {
           searchUsed = dateRange.label;
+          console.log(`Using ${dateRange.label} search results (${matchingArticles.length} articles)`);
           
           // Debug: Log the date range of returned articles
           const newestDate = new Date(Math.max(...matchingArticles.map(a => new Date(a.created || 0).getTime())));
@@ -233,10 +244,13 @@ export async function POST(request: Request) {
             searchRange: searchUsed,
             dateRange: searchUsed.includes('6 months') ? '6 months' : '30 days'
           });
+        } else if (dateRange.days === 30 && matchingArticles.length < minArticlesFor30Day) {
+          console.log(`Only ${matchingArticles.length} articles found in 30-day search (minimum ${minArticlesFor30Day} required), trying 6-month search...`);
+          continue; // Skip to 6-month search
+        } else {
+          console.log(`No relevant articles found in ${dateRange.label} (threshold: ${dateRange.days === 30 ? '100+' : '50+'}), trying longer time range...`);
+          continue; // Skip to next date range
         }
-        
-        // No relevant articles found, continue to next date range
-        console.log(`No relevant articles found in ${dateRange.label}, trying longer time range...`);
       }
     }
 
@@ -363,17 +377,17 @@ function calculateEnhancedRelevanceScore(headline: string, body: string, searchT
       const hoursDiff = (now.getTime() - articleDate.getTime()) / (1000 * 60 * 60);
       const daysDiff = hoursDiff / 24;
       
-      // Recent articles get higher scores
+      // Recent articles get modest scores (reduced to prevent inflation)
       if (hoursDiff <= 24) {
-        score += 150; // Very recent
+        score += 30; // Very recent (reduced from 150)
       } else if (hoursDiff <= 72) {
-        score += 100; // Recent
+        score += 25; // Recent (reduced from 100)
       } else if (daysDiff <= 7) {
-        score += 75; // This week
+        score += 20; // This week (reduced from 75)
       } else if (daysDiff <= 30) {
-        score += 50; // This month
+        score += 15; // This month (reduced from 50)
       } else if (daysDiff <= 90) {
-        score += 25; // Recent months
+        score += 10; // Recent months (reduced from 25)
       }
     }
   }
