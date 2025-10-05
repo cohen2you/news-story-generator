@@ -30,10 +30,11 @@ export async function POST(req: Request) {
 1. Shortening sentences and paragraphs while keeping the same meaning
 2. Removing redundant phrases and unnecessary words  
 3. Combining similar ideas into single, more concise statements
-4. NEVER remove or modify any [HYPERLINK_X] placeholders - they are sacred
+4. NEVER remove or modify any [HYPERLINK_X] placeholders - they are sacred and must be preserved exactly
 5. NEVER remove the "Read Next" section
-6. CRITICAL: Maintain all HTML paragraph tags (<p> and </p>) exactly as they appear
+6. CRITICAL: Maintain all HTML paragraph tags (<p> and </p>) - you may combine paragraphs but do NOT remove paragraph tags
 7. CRITICAL: Do NOT remove or modify any HTML formatting - preserve the structure
+8. CRITICAL: If you combine paragraphs, merge the content but keep the <p> tags around the merged content
 
 SOURCE MATERIAL (for similarity checking):
 ${sourceText || 'No source material provided'}
@@ -72,20 +73,25 @@ CHANGES MADE:
     const finalLinks = (finalArticle.match(/<a[^>]+>.*?<\/a>/g) || []).length;
     const originalLinks = hyperlinks.length;
     
-    // Validate that paragraph tags are preserved
+    // More lenient paragraph validation - check if we have reasonable paragraph structure
     const originalParagraphs = (article.match(/<p>/g) || []).length;
     const finalParagraphs = (finalArticle.match(/<p>/g) || []).length;
+    const paragraphRatio = finalParagraphs / originalParagraphs;
     
-    if (finalLinks !== originalLinks || finalParagraphs !== originalParagraphs) {
-      // If hyperlinks or paragraph structure were lost, return the original article with a warning
+    console.log(`Editorial review validation: Links ${finalLinks}/${originalLinks}, Paragraphs ${finalParagraphs}/${originalParagraphs} (ratio: ${paragraphRatio.toFixed(2)})`);
+    
+    // Only fail if hyperlinks are missing OR if we've lost more than 50% of paragraphs
+    if (finalLinks !== originalLinks || paragraphRatio < 0.5) {
+      console.log(`Editorial review failed: ${finalLinks !== originalLinks ? 'hyperlink mismatch' : 'paragraph structure lost'}`);
+      // If hyperlinks or significant paragraph structure were lost, return the original article with a warning
       return NextResponse.json({ 
         reviewedArticle: article,
         changes: ['Editorial review skipped - formatting preservation failed'],
         originalWordCount: article.split(/\s+/).length,
         newWordCount: article.split(/\s+/).length,
         warning: finalLinks !== originalLinks 
-          ? 'Could not preserve all hyperlinks during condensation'
-          : 'Could not preserve paragraph structure during condensation'
+          ? `Could not preserve all hyperlinks during condensation (${finalLinks}/${originalLinks} preserved)`
+          : `Could not preserve paragraph structure during condensation (${finalParagraphs}/${originalParagraphs} preserved)`
       });
     }
 

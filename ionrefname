@@ -1,0 +1,10 @@
+[33m2b5ce84[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m Remove generic markets page from hyperlink options and improve ticker-to-company name mapping
+[33m0d0d328[m Fix hyperlink logic: convert ticker symbols to company names for proper Benzinga topic URLs
+[33m4f75f7a[m Implemented cheerio-based HTML parser for reliable article scraping
+[33m19371e6[m Enhanced web scraping with robust content extraction for different article types
+[33m778f927[m Fixed TypeScript errors in scan-article route and page.tsx
+[33md08515a[m Fixed TypeScript error in scan-article route and enhanced article generation with direct quotes
+[33m42bc01c[m Enhanced article generation to include direct quotes and improved web scraping
+[33m15f0d53[m Your commit message here
+[33m2cdbb73[m Fix article comparison timing and display issues
+[33mbb08abd[m Replace Copyleaks with simple article comparison

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import LocalDate from '../components/LocalDate';
-import AnalystNoteUpload from '../components/AnalystNoteUpload';
 import EnhancedContextForm from '../components/EnhancedContextForm';
 import EditorialReviewForm from '../components/EditorialReviewForm';
 
@@ -10,34 +9,21 @@ import EditorialReviewForm from '../components/EditorialReviewForm';
 
 export default function PRStoryGeneratorPage() {
   const [ticker, setTicker] = useState('');
-  const [prs, setPRs] = useState<any[]>([]);
-  const [loadingPRs, setLoadingPRs] = useState(false);
-  const [prError, setPRError] = useState('');
-  const [selectedPR, setSelectedPR] = useState<any | null>(null);
   const [primaryText, setPrimaryText] = useState('');
   const [priceAction, setPriceAction] = useState<any | null>(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [article, setArticle] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
-  const [tenNewestArticles, setTenNewestArticles] = useState<any[]>([]);
-  const [loadingTenArticles, setLoadingTenArticles] = useState(false);
-  const [tenArticlesError, setTenArticlesError] = useState('');
-  const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
   const [analystSummary, setAnalystSummary] = useState('');
   const [priceSummary, setPriceSummary] = useState('');
   const [loadingStory, setLoadingStory] = useState(false);
-  const [prFetchAttempted, setPrFetchAttempted] = useState(false);
-  const [lastPrTicker, setLastPrTicker] = useState('');
-  const [showUploadSection, setShowUploadSection] = useState(false);
   const [sourceUrl, setSourceUrl] = useState('');
   const [tickerError, setTickerError] = useState('');
   const [scrapingUrl, setScrapingUrl] = useState(false);
   const [scrapingError, setScrapingError] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [hideUnselectedPRs, setHideUnselectedPRs] = useState(false);
-  const [hideUnselectedArticles, setHideUnselectedArticles] = useState(false);
   const [cta, setCta] = useState('');
   const [loadingCta, setLoadingCta] = useState(false);
   const [ctaError, setCtaError] = useState('');
@@ -48,246 +34,70 @@ export default function PRStoryGeneratorPage() {
   const [copiedSubheads, setCopiedSubheads] = useState(false);
   const [includeCTA, setIncludeCTA] = useState(false);
   const [includeSubheads, setIncludeSubheads] = useState(false);
-  const [showArticleComparison, setShowArticleComparison] = useState(false);
-  const [comparisonSegments, setComparisonSegments] = useState<Array<{start: number, end: number, words: string[], color: string}>>([]);
-  const [loadingComparison, setLoadingComparison] = useState(false);
   const [loadingReword, setLoadingReword] = useState(false);
+  const [showCopyleaksModal, setShowCopyleaksModal] = useState(false);
+  const [sourceCopied, setSourceCopied] = useState(false);
+  const [generatedCopied, setGeneratedCopied] = useState(false);
+  const [articleBeforeContext, setArticleBeforeContext] = useState('');
 
-  // Function to compare articles using OpenAI
-  const compareArticles = async () => {
-    setLoadingComparison(true);
-    try {
-      console.log('Starting article comparison with OpenAI...');
+  // Function to compare articles using Copyleaks with modal interface
+  const compareWithCopyleaks = () => {
+    if (!primaryText.trim() || !article.trim()) {
+      alert('Please provide both source content and generated article to compare.');
+      return;
+    }
+
+    console.log('Opening Copyleaks comparison modal...');
       console.log('Source text length:', primaryText.length);
       console.log('Generated text length:', article.length);
       
-      const response = await fetch('/api/compare-articles', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sourceText: primaryText,
-          generatedText: article.replace(/<[^>]*>/g, '')
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to compare articles');
-      }
-
-      console.log(`OpenAI found ${data.segments.length} matches`);
-
-      // Assign colors to segments
-      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'];
-      
-      const coloredSegments = data.segments.map((segment: any, index: number) => ({
-        ...segment,
-        color: colors[index % colors.length]
-      }));
-
-      setComparisonSegments(coloredSegments);
-      
-      console.log(`Comparison complete: ${data.segments.length} matches found and colored`);
-      
-    } catch (error) {
-      console.error('Error running comparison:', error);
-      setComparisonSegments([]);
-    } finally {
-      setLoadingComparison(false);
-    }
+    // Open Copyleaks in new tab
+    window.open('https://app.copyleaks.com/text-compare', '_blank');
+    
+    // Reset copied states and show modal with copy buttons
+    setSourceCopied(false);
+    setGeneratedCopied(false);
+    setShowCopyleaksModal(true);
   };
 
-  // Function to compare articles with specific text (for reworded articles)
-  const compareArticlesWithText = async (sourceText: string, generatedText: string) => {
-    setLoadingComparison(true);
+  // Copy source article to clipboard
+  const copySourceArticle = async () => {
     try {
-      console.log('Starting comparison with reworded text...');
-      console.log('Source text length:', sourceText.length);
-      console.log('Generated text length:', generatedText.length);
-
-      const response = await fetch('/api/compare-articles', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sourceText: sourceText,
-          generatedText: generatedText.replace(/<[^>]*>/g, '') // Remove HTML tags for comparison
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to compare articles');
-      }
-
-      console.log(`Comparison found ${data.segments.length} matches after rewording`);
-
-      // Assign colors to segments
-      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'];
-      
-      const coloredSegments = data.segments.map((segment: any, index: number) => ({
-        ...segment,
-        color: colors[index % colors.length]
-      }));
-
-      setComparisonSegments(coloredSegments);
-      
-      console.log(`Rescan complete: ${data.segments.length} matches found after rewording`);
-      
+      const sourceText = primaryText.replace(/<[^>]*>/g, ''); // Remove HTML tags
+      await navigator.clipboard.writeText(sourceText);
+      setSourceCopied(true);
+      setTimeout(() => setSourceCopied(false), 2000); // Reset after 2 seconds
     } catch (error) {
-      console.error('Error running rescan comparison:', error);
-      setComparisonSegments([]);
-    } finally {
-      setLoadingComparison(false);
+      console.error('Error copying source article:', error);
+      alert('Failed to copy source article to clipboard.');
     }
   };
 
-  // Function to reword flagged segments and rescan
+  // Copy generated article to clipboard
+  const copyGeneratedArticle = async () => {
+    try {
+      const generatedText = article.replace(/<[^>]*>/g, ''); // Remove HTML tags
+      await navigator.clipboard.writeText(generatedText);
+      setGeneratedCopied(true);
+      setTimeout(() => setGeneratedCopied(false), 2000); // Reset after 2 seconds
+    } catch (error) {
+      console.error('Error copying generated article:', error);
+      alert('Failed to copy generated article to clipboard.');
+    }
+  };
+
+
+  // Function to reword flagged segments and rescan (disabled - using Copyleaks instead)
   const handleRewordAndRescan = async () => {
-    setLoadingReword(true);
-    try {
-      console.log('Starting reword and rescan process...');
-      
-      // Create a prompt to reword the flagged segments
-      const flaggedSegments = comparisonSegments.map(segment => segment.words.join(' ')).join(', ');
-      
-      const rewordPrompt = `You are a professional financial journalist and editor. I need you to intelligently reword specific sentences in this article to avoid plagiarism while maintaining perfect grammar, facts, and readability.
-
-FLAGGED PHRASES TO AVOID (these exact word combinations were found in the source):
-${flaggedSegments}
-
-CURRENT ARTICLE:
-${article}
-
-TASK: Identify sentences containing the flagged phrases and rewrite ONLY those sentences intelligently, while keeping the rest of the article unchanged.
-
-INSTRUCTIONS:
-1. Find sentences that contain the flagged phrases
-2. Rewrite ONLY those sentences using different wording and structure
-3. Maintain ALL facts, numbers, dates, and locations exactly as they are
-4. Ensure rewritten sentences are grammatically correct and make logical sense
-5. Keep the same meaning and context
-6. Use professional financial news writing style
-7. CRITICAL: Preserve ALL existing hyperlinks exactly as they are - do not modify, remove, or change any <a href=""> tags
-8. Preserve all HTML formatting including <p>, <strong>, <em> tags
-9. Do not change sentences that don't contain flagged phrases
-10. Focus on natural, flowing language that reads well
-11. MOST IMPORTANT: Preserve ALL direct quotes exactly as they are - do not modify any text within quotation marks
-
-APPROACH:
-- If a sentence contains a flagged phrase, rewrite the entire sentence for coherence
-- Use synonyms and alternative phrasing for the flagged words
-- Maintain the same factual content and meaning
-- Ensure the sentence flows naturally with the surrounding text
-
-Return the complete article with only the problematic sentences rewritten, keeping everything else exactly the same.`;
-
-      const response = await fetch('/api/generate/reword-article', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: rewordPrompt,
-          currentArticle: article
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to reword article');
-      }
-
-      const data = await response.json();
-      console.log('Reword result:', data);
-      
-      if (data.success) {
-        // Update the article with the reworded version
-        setArticle(data.rewordedArticle);
-        console.log('✅ Article updated with reworded content - ready for copy/paste');
-        
-        // Immediately rescan with the reworded article
-        await compareArticlesWithText(primaryText, data.rewordedArticle);
-      } else {
-        console.error('Rewording failed:', data.error);
-      }
-    } catch (error) {
-      console.error('Error rewording article:', error);
-    } finally {
-      setLoadingReword(false);
-    }
+    console.log('Reword and rescan function is disabled - use Copyleaks for comparison');
+    alert('This function has been replaced with direct Copyleaks integration. Use the "Compare with Copyleaks" button instead.');
   };
 
-  // Function to render text with color-coded highlighted segments
-  const renderTextWithHighlights = (text: string, segments: Array<{start: number, end: number, words: string[], color: string}>) => {
-    // For now, let's use a simpler approach - find the actual text segments in the article
-    const result: React.ReactElement[] = [];
-    let lastIndex = 0;
-    
-    // Sort segments by start position
-    const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
-    
-    sortedSegments.forEach((segment, segmentIndex) => {
-      const segmentText = segment.words.join(' ');
-      
-      // Find this segment in the text
-      const segmentIndexInText = text.indexOf(segmentText);
-      
-      if (segmentIndexInText !== -1) {
-        // Add text before the segment
-        if (segmentIndexInText > lastIndex) {
-          result.push(
-            <span key={`before-${segmentIndex}`}>
-              {text.substring(lastIndex, segmentIndexInText)}
-            </span>
-          );
-        }
-        
-        // Add the highlighted segment
-        result.push(
-          <span 
-            key={`segment-${segmentIndex}`}
-            style={{ 
-              backgroundColor: segment.color + '40',
-              color: segment.color,
-              fontWeight: 'bold',
-              border: `1px solid ${segment.color}`,
-              borderRadius: '2px',
-              padding: '1px 2px'
-            }}
-          >
-            {segmentText}
-          </span>
-        );
-        
-        lastIndex = segmentIndexInText + segmentText.length;
-      }
-    });
-    
-    // Add remaining text
-    if (lastIndex < text.length) {
-      result.push(
-        <span key="after">
-          {text.substring(lastIndex)}
-        </span>
-      );
-    }
-    
-    return result.length > 0 ? result : <span>{text}</span>;
-  };
 
 
   const [loadingContext, setLoadingContext] = useState(false);
   const [contextError, setContextError] = useState('');
   const [previouslyUsedContextUrls, setPreviouslyUsedContextUrls] = useState<string[]>([]);
-  const [loadingTechnicalContext, setLoadingTechnicalContext] = useState(false);
-  const [technicalContextError, setTechnicalContextError] = useState('');
-  const [testTopicResult, setTestTopicResult] = useState<any>(null);
-  const [testingTopic, setTestingTopic] = useState(false);
   const [showContextSearch, setShowContextSearch] = useState(false);
   const [contextSearchTerm, setContextSearchTerm] = useState('');
   const [contextSearchResults, setContextSearchResults] = useState<any[]>([]);
@@ -312,24 +122,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
 
 
 
-  // Client-only: Convert PR or Article HTML body to plain text when selected
-  useEffect(() => {
-    if (selectedPR && selectedPR.body) {
-      if (typeof window !== 'undefined') {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = selectedPR.body;
-        setPrimaryText(tempDiv.textContent || tempDiv.innerText || '');
-      }
-    } else if (selectedArticle && selectedArticle.body) {
-      if (typeof window !== 'undefined') {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = selectedArticle.body;
-        setPrimaryText(tempDiv.textContent || tempDiv.innerText || '');
-      }
-    } else {
-      setPrimaryText('');
-    }
-  }, [selectedPR, selectedArticle]);
 
   useEffect(() => {
     console.log('Ticker:', ticker); // Debug log for ticker state
@@ -355,45 +147,11 @@ Return the complete article with only the problematic sentences rewritten, keepi
     console.log('showLeadHyperlinkSearch state changed:', showLeadHyperlinkSearch);
   }, [showLeadHyperlinkSearch]);
 
-  // Fetch PRs for ticker
-  const fetchPRs = async () => {
-    if (!ticker.trim()) {
-      // Allow empty ticker - no validation required
-      return;
-    }
-    setLoadingPRs(true);
-    setPRError('');
-    setPRs([]);
-    setSelectedPR(null);
-    setArticle('');
-    setTenNewestArticles([]); // Clear articles
-    setSelectedArticle(null); // Clear article selection
-    setPrFetchAttempted(true); // Mark that fetch has been attempted
-    setLastPrTicker(ticker); // Store the last attempted ticker
-    setShowUploadSection(false); // Close analyst note input
-    setHideUnselectedPRs(false);
-    setHideUnselectedArticles(false);
-    try {
-      const res = await fetch('/api/bz/prs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.prs) throw new Error(data.error || 'Failed to fetch PRs');
-      setPRs(data.prs);
-    } catch (err: any) {
-      setPRError(err.message || 'Failed to fetch PRs');
-    } finally {
-      setLoadingPRs(false);
-    }
-  };
 
   // Fetch price action for ticker
   const fetchPriceAction = async () => {
     setLoadingPrice(true);
     setPriceAction(null);
-    setShowUploadSection(false); // Close analyst note input
     try {
       const res = await fetch('/api/bz/priceaction', {
         method: 'POST',
@@ -458,75 +216,16 @@ Return the complete article with only the problematic sentences rewritten, keepi
     setArticle('');
     setLoadingStory(true);
 
-    // If no primary text is provided, try to fetch the latest PR or article (only if ticker is provided)
+    // Use primary text as source content
     let sourceText = primaryText;
     let createdDateStr = null;
     
-    if (!sourceText.trim() && ticker.trim()) {
-      try {
-        // First try to fetch the latest PR
-        const prRes = await fetch('/api/bz/prs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticker }),
-        });
-        const prData = await prRes.json();
-        
-        if (prRes.ok && prData.prs && prData.prs.length > 0) {
-          const latestPR = prData.prs[0]; // Get the most recent PR
-          if (typeof window !== 'undefined') {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = latestPR.body;
-            sourceText = tempDiv.textContent || tempDiv.innerText || '';
-          }
-          setSourceUrl(latestPR.url || '');
-          createdDateStr = latestPR.created;
-          setSelectedPR(latestPR);
-          setSelectedArticle(null);
-          setHideUnselectedPRs(true);
-          setHideUnselectedArticles(false);
-        } else {
-          // If no PRs, try to fetch the latest article
-          const articleRes = await fetch('/api/bz/articles', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker, count: 1 }),
-          });
-          const articleData = await articleRes.json();
-          
-          if (articleRes.ok && articleData.articles && articleData.articles.length > 0) {
-            const latestArticle = articleData.articles[0]; // Get the most recent article
-            if (typeof window !== 'undefined') {
-              const tempDiv = document.createElement('div');
-              tempDiv.innerHTML = latestArticle.body;
-              sourceText = tempDiv.textContent || tempDiv.innerText || '';
-            }
-            setSourceUrl(latestArticle.url || '');
-            createdDateStr = latestArticle.created;
-            setSelectedArticle(latestArticle);
-            setSelectedPR(null);
-            setHideUnselectedArticles(true);
-            setHideUnselectedPRs(false);
-          } else {
-            throw new Error('No recent press releases or articles found for this ticker. Please fetch PRs or articles first, or provide content manually.');
-          }
-        }
-      } catch (error: any) {
-        setGenError(error.message || 'Failed to fetch source content. Please provide content manually or fetch PRs/articles first.');
+    if (!sourceText.trim()) {
+      // If no source text provided, show error
+      setGenError('Please provide content to generate a story.');
         setGenerating(false);
         setLoadingStory(false);
         return;
-      }
-    } else if (!sourceText.trim() && !ticker.trim()) {
-      // If no source text and no ticker, show error
-      setGenError('Please provide either a ticker or source content to generate a story.');
-      setGenerating(false);
-      setLoadingStory(false);
-      return;
-    } else {
-      // Use existing source URL and date from selected PR or article
-      // sourceUrl state is already set by handleSelectPR/handleSelectArticle
-      createdDateStr = selectedPR?.created || selectedArticle?.created || null;
     }
 
     // Fetch analyst ratings and price action in parallel and use their returned values (only if ticker is provided)
@@ -591,7 +290,7 @@ Return the complete article with only the problematic sentences rewritten, keepi
         }
         // Format the actual date for reference in paragraphs
         sourceDateFormatted = createdDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-      } else if (sourceText && ticker && !selectedPR && !selectedArticle) {
+      } else if (sourceText && ticker) {
         // For analyst notes, try to extract date from the text first
         const dateMatch = sourceText.match(/(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
         if (dateMatch) {
@@ -708,9 +407,7 @@ Return the complete article with only the problematic sentences rewritten, keepi
       const data = await res.json();
       if (!res.ok || !data.story) throw new Error(data.error || 'Failed to generate story');
              setArticle(data.story);
-             // Reset comparison state when generating new article
-             setShowArticleComparison(false);
-             setComparisonSegments([]);
+             // Comparison now handled by Copyleaks directly
        setPreviouslyUsedContextUrls([]); // Clear previously used context URLs when generating new article
        setLeadHyperlinkArticleIndex(0); // Reset hyperlink article index for new article
        setAddingLeadHyperlink(false); // Reset loading state
@@ -722,76 +419,7 @@ Return the complete article with only the problematic sentences rewritten, keepi
     }
   };
 
-  // Fetch 10 newest articles for ticker
-  const fetchTenNewestArticles = async () => {
-    if (!ticker.trim()) {
-      // Allow empty ticker - no validation required
-      return;
-    }
-    setLoadingTenArticles(true);
-    setTenArticlesError('');
-    setTenNewestArticles([]);
-    setSelectedArticle(null);
-    setPRs([]); // Clear PRs
-    setSelectedPR(null); // Clear PR selection
-    setPrFetchAttempted(false); // Clear PR fetch attempt state
-    setLastPrTicker(''); // Clear last PR ticker
-    setShowUploadSection(false); // Close analyst note input
-    setHideUnselectedPRs(false);
-    setHideUnselectedArticles(false);
-    try {
-      const res = await fetch('/api/bz/articles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker, count: 10 }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.articles) throw new Error(data.error || 'Failed to fetch articles');
-      setTenNewestArticles(data.articles);
-    } catch (err: any) {
-      setTenArticlesError(err.message || 'Failed to fetch articles');
-    } finally {
-      setLoadingTenArticles(false);
-    }
-  };
 
-  // When PR is selected, fetch price action and prepare for generation
-  const handleSelectPR = async (pr: any) => {
-    if (selectedPR?.id === pr.id) {
-      // If clicking the same PR, deselect it and show all PRs
-      setSelectedPR(null);
-      setHideUnselectedPRs(false);
-      setSourceUrl(''); // Clear source URL when deselecting
-    } else {
-      // Select the new PR and hide unselected ones
-      setSelectedPR(pr);
-      setHideUnselectedPRs(true);
-      setSourceUrl(pr.url || ''); // Set source URL from selected PR
-    }
-    setSelectedArticle(null);
-    setHideUnselectedArticles(false);
-    setArticle('');
-    await fetchPriceAction();
-  };
-
-  // When article is selected, prepare for generation
-  const handleSelectArticle = async (article: any) => {
-    if (selectedArticle?.id === article.id) {
-      // If clicking the same article, deselect it and show all articles
-      setSelectedArticle(null);
-      setHideUnselectedArticles(false);
-      setSourceUrl(''); // Clear source URL when deselecting
-    } else {
-      // Select the new article and hide unselected ones
-      setSelectedArticle(article);
-      setHideUnselectedArticles(true);
-      setSourceUrl(article.url || ''); // Set source URL from selected article
-    }
-    setSelectedPR(null);
-    setHideUnselectedPRs(false);
-    setArticle('');
-    await fetchPriceAction();
-  };
 
 
 
@@ -871,43 +499,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
     }
   };
 
-  // Add technical context using Benzinga API data
-  const addTechnicalContext = async () => {
-    if (!article.trim()) {
-      setTechnicalContextError('Generated article is required');
-      return;
-    }
-
-    if (!ticker.trim()) {
-      setTechnicalContextError('Ticker is required for technical context');
-      return;
-    }
-    
-    setTechnicalContextError('');
-    setLoadingTechnicalContext(true);
-    
-    try {
-      const res = await fetch('/api/generate/add-technical-context', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          currentArticle: article,
-          ticker: ticker
-        }),
-      });
-      
-      const data = await res.json();
-      if (data.error) {
-        setTechnicalContextError(data.error);
-      } else if (data.updatedArticle) {
-        setArticle(data.updatedArticle);
-      }
-    } catch (error) {
-      setTechnicalContextError('Failed to add technical context.');
-    } finally {
-      setLoadingTechnicalContext(false);
-    }
-  };
 
   const handleScrapeUrl = async () => {
     if (!sourceUrl.trim()) {
@@ -930,15 +521,7 @@ Return the complete article with only the problematic sentences rewritten, keepi
       if (res.ok && data.text) {
         console.log('Setting primary text with length:', data.text.length); // Debug log
         setPrimaryText(data.text);
-        setSelectedPR(null);
-        setSelectedArticle(null);
         setArticle('');
-        setPRs([]);
-        setTenNewestArticles([]);
-        setPrFetchAttempted(false);
-        setLastPrTicker('');
-        setHideUnselectedPRs(false);
-        setHideUnselectedArticles(false);
         setCta('');
         setCtaError('');
         setSubheads([]);
@@ -968,22 +551,13 @@ Return the complete article with only the problematic sentences rewritten, keepi
     setScrapingUrl(false);
     setScrapingError('');
     setShowManualInput(false);
-    setPRs([]);
-    setSelectedPR(null);
     setArticle('');
-    setTenNewestArticles([]);
-    setSelectedArticle(null);
     setAnalystSummary('');
     setPriceSummary('');
     setGenError('');
-    setPrFetchAttempted(false);
-    setLastPrTicker('');
-    setShowUploadSection(false);
     setPrimaryText('');
     setPriceAction(null);
     setCopied(false);
-    setHideUnselectedPRs(false);
-    setHideUnselectedArticles(false);
     setCta('');
     setCtaError('');
     setCopiedCta(false);
@@ -995,51 +569,17 @@ Return the complete article with only the problematic sentences rewritten, keepi
     setLoadingContext(false);
     setContextError('');
     setPreviouslyUsedContextUrls([]);
-    setLoadingTechnicalContext(false);
-    setTechnicalContextError('');
     setShowContextSearch(false);
     setContextSearchTerm('');
     setContextSearchResults([]);
     setSelectedContextArticles([]);
     setShowEditorialReview(false);
+    setEditorialReviewCompleted(false);
+    setEditorialReviewChanges([]);
+    setEditorialReviewStats({ originalWordCount: 0, newWordCount: 0 });
+    setArticleBeforeContext('');
   };
 
-  const handleAnalystNoteTextExtracted = (text: string, noteTicker: string) => {
-    if (text && noteTicker) {
-      setTicker(noteTicker);
-      setPrimaryText(text);
-      setSelectedPR(null);
-      setSelectedArticle(null);
-      setArticle('');
-      setPRs([]);
-      setTenNewestArticles([]);
-      setPrFetchAttempted(false);
-      setLastPrTicker('');
-      setHideUnselectedPRs(false);
-      setHideUnselectedArticles(false);
-      setCta('');
-      setCtaError('');
-      setSubheads([]);
-      setSubheadsError('');
-    } else if (!text && !noteTicker) {
-      // Clear everything when manual text input is requested
-      setTicker('');
-      setPrimaryText('');
-      setSelectedPR(null);
-      setSelectedArticle(null);
-      setArticle('');
-      setPRs([]);
-      setTenNewestArticles([]);
-      setPrFetchAttempted(false);
-      setLastPrTicker('');
-      setHideUnselectedPRs(false);
-      setHideUnselectedArticles(false);
-      setCta('');
-      setCtaError('');
-      setSubheads([]);
-      setSubheadsError('');
-    }
-  };
 
   const articleRef = useRef<HTMLDivElement>(null);
 
@@ -1240,41 +780,19 @@ Return the complete article with only the problematic sentences rewritten, keepi
     }
   };
 
-  const testTopicUrl = async () => {
-    setTestingTopic(true);
-    setTestTopicResult(null);
-    try {
-      const response = await fetch('/api/test-topic-url', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ phrase: 'CNBC\'s Jim Cramer' }),
-      });
-      
-      const data = await response.json();
-      setTestTopicResult(data);
-    } catch (error) {
-      console.error('Error testing topic URL:', error);
-      setTestTopicResult({ error: 'Failed to test topic URL' });
-    } finally {
-      setTestingTopic(false);
-    }
-  };
 
   const handleLeadHyperlinkSearchClick = () => {
     console.log('Lead hyperlink search button clicked');
     setShowLeadHyperlinkSearch(true);
     setLeadHyperlinkSearchResults([]);
     setSelectedLeadHyperlinkArticle(null);
-    // Automatically trigger the analysis
-    searchLeadHyperlinkArticles();
+    setLeadHyperlinkSearchTerm('');
     console.log('showLeadHyperlinkSearch set to true');
   };
 
   const searchLeadHyperlinkArticles = async () => {
-    if (!article) {
-      setContextError('No article to analyze');
+    if (!leadHyperlinkSearchTerm.trim()) {
+      setContextError('Please enter a search term');
       return;
     }
 
@@ -1284,40 +802,27 @@ Return the complete article with only the problematic sentences rewritten, keepi
     setSelectedLeadHyperlinkArticle(null);
 
     try {
-      // Extract the first paragraph (lead paragraph) from the article
-      const paragraphs = article.split('</p>');
-      let leadParagraph = '';
-      
-      if (paragraphs.length > 0) {
-        leadParagraph = paragraphs[0].replace('<p>', '').trim();
-      }
-
-      if (!leadParagraph) {
-        setContextError('No lead paragraph found');
-        return;
-      }
-
-      const response = await fetch('/api/generate/lead-hyperlink', {
+      const response = await fetch('/api/bz/search-articles', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ leadParagraph }),
+        body: JSON.stringify({ searchTerm: leadHyperlinkSearchTerm.trim() }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze lead paragraph');
+        throw new Error(data.error || 'Failed to search articles');
       }
 
       setLeadHyperlinkSearchResults(data.articles || []);
       
-      if (data.totalFound === 0) {
-        setContextError('No relevant landing pages found for the lead paragraph');
+      if (!data.articles || data.articles.length === 0) {
+        setContextError(`No articles found containing "${leadHyperlinkSearchTerm}"`);
       }
     } catch (error: any) {
-      setContextError(error.message || 'Failed to analyze lead paragraph');
+      setContextError(error.message || 'Failed to search for articles. Please try again.');
     } finally {
       setIsSearchingLeadHyperlink(false);
     }
@@ -1656,6 +1161,9 @@ Return the complete article with only the problematic sentences rewritten, keepi
       return;
     }
 
+    // Store the current article state before adding context
+    setArticleBeforeContext(article);
+
     setIsAddingMultipleContext(true);
 
     try {
@@ -1678,10 +1186,8 @@ Return the complete article with only the problematic sentences rewritten, keepi
 
       setArticle(data.updatedArticle);
       
-      // Reset form
-      setShowContextSearch(false);
-      setContextSearchTerm('');
-      setContextSearchResults([]);
+      // Keep the context search interface open for additional context additions
+      // Only clear the selected articles, but keep search results and interface open
       setSelectedContextArticles([]);
       setContextError('');
     } catch (error: any) {
@@ -1716,7 +1222,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
             }}
             placeholder="e.g. AAPL"
             style={{ fontSize: 16, padding: 6, width: 120 }}
-            disabled={loadingPRs}
           />
         </label>
         {tickerError && (
@@ -1726,42 +1231,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
         )}
       </div>
       
-      <div style={{ marginBottom: 20 }}>
-        <button
-          onClick={fetchPRs}
-          /* disabled={loadingPRs || !ticker.trim()} */
-          style={{ marginRight: 10, padding: '6px 12px' }}
-        >
-          {loadingPRs ? 'Fetching PRs...' : 'Fetch PRs'}
-        </button>
-        <button
-          onClick={fetchTenNewestArticles}
-          /* disabled={loadingTenArticles || !ticker.trim()} */
-          style={{ marginRight: 10, padding: '6px 12px' }}
-        >
-          {loadingTenArticles ? 'Fetching Posts...' : 'Fetch 10 Newest Posts'}
-        </button>
-        <button
-          onClick={() => setShowUploadSection(!showUploadSection)}
-          style={{ padding: '6px 12px' }}
-        >
-          Analyst Note Upload
-        </button>
-        <button
-          onClick={testTopicUrl}
-          disabled={testingTopic}
-          style={{ 
-            padding: '6px 12px', 
-            background: testingTopic ? '#6b7280' : '#dc2626', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: 4,
-            cursor: testingTopic ? 'not-allowed' : 'pointer'
-          }}
-        >
-          {testingTopic ? 'Testing...' : 'Test Topic URL'}
-        </button>
-      </div>
       
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', marginBottom: 8 }}>
@@ -1842,7 +1311,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
       {/* Generated Article - Moved here to appear directly under Generate Story button */}
              {genError && <div style={{ color: 'red', marginBottom: 10 }}>{genError}</div>}
        {contextError && <div style={{ color: 'red', marginBottom: 10 }}>{contextError}</div>}
-       {technicalContextError && <div style={{ color: 'red', marginBottom: 10 }}>{technicalContextError}</div>}
              {article && (
          <div style={{ marginBottom: 20 }}>
            {/* Enhanced Context Search Interface - Moved above article */}
@@ -1968,7 +1436,20 @@ Return the complete article with only the problematic sentences rewritten, keepi
                                      minute: '2-digit',
                                    })}
                                  </span>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                  <span>Relevance: {article.relevanceScore}</span>
+                                   {article.url && (
+                                     <a 
+                                       href={article.url} 
+                                       target="_blank" 
+                                       rel="noopener noreferrer"
+                                       style={{ color: '#2563eb', textDecoration: 'underline' }}
+                                       onClick={(e) => e.stopPropagation()} // Prevent triggering the checkbox selection
+                                     >
+                                       View Article
+                                     </a>
+                                   )}
+                                 </div>
                                </div>
                              </div>
                            </div>
@@ -2030,15 +1511,54 @@ Return the complete article with only the problematic sentences rewritten, keepi
                 backgroundColor: '#f9fafb' 
               }}>
                 <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 18, fontWeight: 'bold' }}>
-                  Lead Hyperlink Options
+                  Add Lead Hyperlink
                 </h3>
                 
                 <div style={{ marginBottom: 16 }}>
-                  {isSearchingLeadHyperlink && (
-                    <div style={{ marginBottom: 8, color: '#6b7280' }}>
-                      Analyzing lead paragraph for relevant landing pages...
+                  <p style={{ marginBottom: 12, fontSize: 14, color: '#6b7280' }}>
+                    Search for articles to create hyperlinks in your lead paragraph.
+                  </p>
+                  
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                    <input
+                      type="text"
+                      value={leadHyperlinkSearchTerm}
+                      onChange={(e) => setLeadHyperlinkSearchTerm(e.target.value)}
+                      placeholder="e.g., 'Tesla', 'Federal Reserve', 'Apple earnings'..."
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: 4,
+                        fontSize: 14,
+                        outline: 'none'
+                      }}
+                      onKeyPress={(e) => e.key === 'Enter' && searchLeadHyperlinkArticles()}
+                    />
+                    <button
+                      onClick={searchLeadHyperlinkArticles}
+                      disabled={isSearchingLeadHyperlink || !leadHyperlinkSearchTerm.trim()}
+                      style={{ 
+                        padding: '8px 16px', 
+                        background: '#7c3aed', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: 4,
+                        fontSize: 14,
+                        cursor: isSearchingLeadHyperlink || !leadHyperlinkSearchTerm.trim() ? 'not-allowed' : 'pointer',
+                        opacity: isSearchingLeadHyperlink || !leadHyperlinkSearchTerm.trim() ? 0.5 : 1
+                      }}
+                    >
+                      {isSearchingLeadHyperlink ? 'Searching...' : 'Search'}
+                    </button>
+                  </div>
+                  
+                  {contextError && (
+                    <div style={{ color: '#dc2626', fontSize: 14, marginBottom: 8 }}>
+                      {contextError}
                     </div>
                   )}
+                  
                   <button
                     onClick={() => setShowLeadHyperlinkSearch(false)}
                     style={{ 
@@ -2058,7 +1578,7 @@ Return the complete article with only the problematic sentences rewritten, keepi
                 {leadHyperlinkSearchResults.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <h4 style={{ marginBottom: 12, fontSize: 16, fontWeight: 'bold' }}>
-                      Found {leadHyperlinkSearchResults.length} landing page options (select one):
+                      Found {leadHyperlinkSearchResults.length} article{leadHyperlinkSearchResults.length > 1 ? 's' : ''} (select one):
                     </h4>
                     
                     <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 16 }}>
@@ -2115,9 +1635,18 @@ Return the complete article with only the problematic sentences rewritten, keepi
                                       day: 'numeric',
                                       hour: '2-digit',
                                       minute: '2-digit',
-                                    }) : 'Landing Page'}
+                                    }) : 'Article'}
                                   </span>
-                                  <span>Relevance: {article.relevanceScore}</span>
+                                  {article.url && (
+                                    <a 
+                                      href={article.url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      style={{ color: '#2563eb', textDecoration: 'underline' }}
+                                    >
+                                      View Article
+                                    </a>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -2165,7 +1694,8 @@ Return the complete article with only the problematic sentences rewritten, keepi
               </div>
             )}
 
-                         <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 10, gap: 10 }}>
+               {/* Primary Actions Row */}
+               <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8, gap: 10 }}>
                  <button
                    onClick={handleLeadHyperlinkSearchClick}
                    disabled={!article || article.trim() === ''}
@@ -2197,21 +1727,39 @@ Return the complete article with only the problematic sentences rewritten, keepi
                  >
                    Add Benzinga Context
                  </button>
+                 {primaryText && article && (
                  <button
-                   onClick={addTechnicalContext}
-                   disabled={loadingTechnicalContext}
+                     onClick={() => compareWithCopyleaks()}
                    style={{ 
                      padding: '8px 16px', 
-                     background: loadingTechnicalContext ? '#6b7280' : '#059669', 
+                       background: '#059669', 
                      color: 'white', 
                      border: 'none', 
                      borderRadius: 4,
                      fontSize: 14,
-                     cursor: loadingTechnicalContext ? 'not-allowed' : 'pointer'
+                       cursor: 'pointer'
                    }}
                  >
-                   {loadingTechnicalContext ? 'Adding Technical Context...' : 'Add Technical Context'}
+                     Compare with Copyleaks
                  </button>
+                 )}
+                 <button
+                   onClick={handleCopyArticle}
+                   style={{ 
+                     padding: '8px 16px', 
+                     background: copied ? '#059669' : '#2563eb', 
+                     color: 'white', 
+                     border: 'none', 
+                     borderRadius: 4,
+                     fontSize: 14
+                   }}
+                 >
+                   {copied ? 'Copied!' : 'Copy Article'}
+                 </button>
+               </div>
+
+               {/* Secondary Actions Row */}
+               <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 10, gap: 10 }}>
                                   <button
                     onClick={() => {
                       console.log('Editorial Review button clicked');
@@ -2237,7 +1785,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
                                     >
                      Editorial Review
                    </button>
-                   {/* Debug: originalArticleBeforeReview exists: {originalArticleBeforeReview ? 'YES' : 'NO'}, lengths: {originalArticleBeforeReview?.length} vs {article?.length} */}
                    {((originalArticleBeforeReview && originalArticleBeforeReview.trim() !== article.trim()) || editorialReviewCompleted) && (
                      <button
                        onClick={() => {
@@ -2258,19 +1805,30 @@ Return the complete article with only the problematic sentences rewritten, keepi
                          Undo Edit
                        </button>
                    )}
-                                    <button
-                    onClick={handleCopyArticle}
-                    style={{ 
-                      padding: '8px 16px', 
-                      background: copied ? '#059669' : '#2563eb', 
-                      color: 'white', 
-                      border: 'none', 
-                      borderRadius: 4,
-                      fontSize: 14
-                    }}
-                  >
-                    {copied ? 'Copied!' : 'Copy Article'}
-                  </button>
+                   {articleBeforeContext && articleBeforeContext.trim() !== article.trim() && (
+                     <button
+                       onClick={() => {
+                         setArticle(articleBeforeContext);
+                         setArticleBeforeContext('');
+                         // Reset context search interface to allow new context additions
+                         setShowContextSearch(false);
+                         setSelectedContextArticles([]);
+                         setContextSearchResults([]);
+                         setContextError('');
+                       }}
+                       style={{ 
+                         padding: '8px 16px', 
+                         background: '#dc2626', 
+                         color: 'white', 
+                         border: 'none', 
+                         borderRadius: 4,
+                         fontSize: 14,
+                         cursor: 'pointer'
+                       }}
+                     >
+                       Undo Context
+                     </button>
+                   )}
                   <button
                     onClick={handleGenerateHeadlinesAndKeyPoints}
                     disabled={generatingHeadlines}
@@ -2286,34 +1844,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
                   >
                     {generatingHeadlines ? 'Generating...' : 'Generate Headlines & Key Points'}
                   </button>
-                  {primaryText && article && (
-                    <button
-                      onClick={async () => {
-                        if (!showArticleComparison) {
-                          // Show comparison view and run analysis
-                          setShowArticleComparison(true);
-                          setComparisonSegments([]);
-                          await compareArticles();
-                        } else {
-                          // Hide comparison
-                          setShowArticleComparison(false);
-                          setComparisonSegments([]);
-                        }
-                      }}
-                      disabled={loadingComparison}
-                      style={{ 
-                        padding: '8px 16px', 
-                        background: showArticleComparison ? '#dc2626' : (loadingComparison ? '#6b7280' : '#059669'), 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: 4,
-                        fontSize: 14,
-                        cursor: loadingComparison ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {loadingComparison ? 'Analyzing...' : (showArticleComparison ? 'Hide Comparison' : 'Compare Articles')}
-                    </button>
-                  )}
                </div>
 
         {/* Headlines and Key Points Display */}
@@ -2491,138 +2021,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
           
                   )}
 
-        {/* Article Comparison View */}
-        {showArticleComparison && primaryText && article && (
-          <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-            {loadingComparison ? (
-              <div style={{ 
-                textAlign: 'center', 
-                padding: '40px', 
-                color: '#6b7280',
-                fontSize: '16px'
-              }}>
-                <div style={{ marginBottom: '16px' }}>🤖 AI is analyzing both articles...</div>
-                <div style={{ fontSize: '14px', color: '#9ca3af' }}>
-                  Finding identical text segments using OpenAI
-                </div>
-              </div>
-            ) : (
-              <>
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '20px',
-                  minHeight: '400px'
-                }}>
-                  {/* Source Article Panel */}
-                  <div style={{ 
-                    flex: 1,
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    backgroundColor: '#f8fafc'
-                  }}>
-                    <h3 style={{ 
-                      margin: 0, 
-                      marginBottom: '16px', 
-                      fontSize: '18px', 
-                      fontWeight: 'bold',
-                      color: '#1e293b'
-                    }}>
-                      Source Article
-                    </h3>
-                    <div style={{
-                      fontSize: '14px',
-                      fontFamily: 'Georgia, serif',
-                      lineHeight: '1.6',
-                      whiteSpace: 'pre-wrap',
-                      maxHeight: '500px',
-                      overflowY: 'auto'
-                    }}>
-                      {renderTextWithHighlights(primaryText, comparisonSegments)}
-                    </div>
-                  </div>
-
-                  {/* Generated Article Panel */}
-                  <div style={{ 
-                    flex: 1,
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    backgroundColor: '#f8fafc'
-                  }}>
-                    <h3 style={{ 
-                      margin: 0, 
-                      marginBottom: '16px', 
-                      fontSize: '18px', 
-                      fontWeight: 'bold',
-                      color: '#1e293b'
-                    }}>
-                      Generated Article
-                    </h3>
-                    <div style={{
-                      fontSize: '14px',
-                      fontFamily: 'Georgia, serif',
-                      lineHeight: '1.6',
-                      whiteSpace: 'pre-wrap',
-                      maxHeight: '500px',
-                      overflowY: 'auto'
-                    }}>
-                      {renderTextWithHighlights(article.replace(/<[^>]*>/g, ''), comparisonSegments)}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Results Summary */}
-                {comparisonSegments.length > 0 && (
-                  <div style={{ 
-                    marginTop: '16px', 
-                    padding: '12px', 
-                    backgroundColor: '#fef2f2', 
-                    border: '1px solid #fecaca', 
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    color: '#991b1b'
-                  }}>
-                    <div style={{ marginBottom: '12px' }}>
-                      <strong>AI Analysis Complete:</strong> Found {comparisonSegments.length} identical text segments highlighted above. 
-                      Each color represents a different matching segment between the articles.
-                    </div>
-                    <button
-                      onClick={handleRewordAndRescan}
-                      disabled={loadingReword}
-                      style={{ 
-                        padding: '8px 16px', 
-                        background: loadingReword ? '#6b7280' : '#dc2626', 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: '4px',
-                        fontSize: '14px',
-                        cursor: loadingReword ? 'not-allowed' : 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      {loadingReword ? 'Rewording...' : 'Reword & Rescan'}
-                    </button>
-                  </div>
-                )}
-                
-                {comparisonSegments.length === 0 && !loadingComparison && (
-                  <div style={{ 
-                    marginTop: '16px', 
-                    padding: '12px', 
-                    backgroundColor: '#f0fdf4', 
-                    border: '1px solid #bbf7d0', 
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    color: '#166534'
-                  }}>
-                    <strong>✅ No Plagiarism Detected:</strong> The AI found no identical text segments of 3+ words between the articles.
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
 
         {/* Editorial Review Changes Summary */}
         {editorialReviewCompleted && editorialReviewChanges.length > 0 && (
@@ -2803,67 +2201,6 @@ Return the complete article with only the problematic sentences rewritten, keepi
 
         
       
-      {/* Topic URL Test Results */}
-      {testTopicResult && (
-        <div style={{ marginBottom: 20 }}>
-          <h2>Topic URL Test Results</h2>
-          <div style={{ background: '#f9fafb', padding: 16, borderRadius: 4, border: '1px solid #e5e7eb' }}>
-            {testTopicResult.error ? (
-              <div style={{ color: 'red', backgroundColor: '#fef2f2', padding: '12px', borderRadius: '4px', border: '1px solid #fecaca' }}>
-                {testTopicResult.error}
-              </div>
-            ) : (
-              <div style={{ fontSize: 14 }}>
-                <div style={{ marginBottom: 12 }}>
-                  <strong>Input:</strong> {testTopicResult.phrase}<br/>
-                  <strong>Clean Topic:</strong> {testTopicResult.cleanTopic}<br/>
-                  <strong>Terms:</strong> {testTopicResult.terms.join(', ')}
-                </div>
-                
-                <div style={{ marginBottom: 12 }}>
-                  <strong>API Results:</strong><br/>
-                  • Total Articles: {testTopicResult.totalArticlesFromAPI}<br/>
-                  • Topic Relevant: {testTopicResult.topicRelevantArticles}<br/>
-                  • Company Articles: {testTopicResult.companyArticles}<br/>
-                  • Found Company: {testTopicResult.foundCompany || 'None'}<br/>
-                  • Final URL: <a href={testTopicResult.finalUrl} target="_blank" style={{ color: '#2563eb', textDecoration: 'underline' }}>{testTopicResult.finalUrl}</a>
-                </div>
-                
-                {testTopicResult.topScoredArticles && testTopicResult.topScoredArticles.length > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    <strong>Top Scored Articles:</strong>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: 8 }}>
-                      {testTopicResult.topScoredArticles.map((article: any, index: number) => (
-                        <div key={index} style={{ border: '1px solid #d1d5db', padding: 8, marginBottom: 8, borderRadius: 4, backgroundColor: 'white' }}>
-                          <div><strong>Score:</strong> {article.score}</div>
-                          <div><strong>Headline:</strong> {article.headline}</div>
-                          <div><strong>URL:</strong> <a href={article.url} target="_blank" style={{ color: '#2563eb', textDecoration: 'underline' }}>{article.url}</a></div>
-                          <div><strong>Matching Terms:</strong> {article.matchingTerms.join(', ')}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {testTopicResult.allTopicArticles && testTopicResult.allTopicArticles.length > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    <strong>All Topic Articles ({testTopicResult.allTopicArticles.length}):</strong>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: 8 }}>
-                      {testTopicResult.allTopicArticles.map((article: any, index: number) => (
-                        <div key={index} style={{ border: '1px solid #d1d5db', padding: 8, marginBottom: 8, borderRadius: 4, backgroundColor: 'white' }}>
-                          <div><strong>Headline:</strong> {article.headline}</div>
-                          <div><strong>URL:</strong> <a href={article.url} target="_blank" style={{ color: '#2563eb', textDecoration: 'underline' }}>{article.url}</a></div>
-                          <div><strong>Body:</strong> {article.body}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
       
       {scrapingError && (
         <div style={{ marginBottom: 20 }}>
@@ -2897,148 +2234,18 @@ Return the complete article with only the problematic sentences rewritten, keepi
         </div>
       )}
       
-      {showUploadSection && (
-        <AnalystNoteUpload onTextExtracted={handleAnalystNoteTextExtracted} ticker={ticker} />
-      )}
       
-      {prError && <div style={{ color: 'red', marginBottom: 10 }}>{prError}</div>}
-      {prs.length === 0 && !loadingPRs && lastPrTicker && prFetchAttempted && (
-        <div style={{ color: '#b91c1c', marginBottom: 20 }}>
-          No press releases found for the past 7 days for {lastPrTicker}.
-        </div>
-      )}
-      {prs.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h2>Select a Press Release</h2>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {prs.map(pr => {
-              // Hide unselected PRs if hideUnselectedPRs is true and this PR is not selected
-              if (hideUnselectedPRs && selectedPR?.id !== pr.id) {
-                return null;
-              }
-              return (
-                <li key={pr.id} style={{ marginBottom: 10 }}>
-                  <button
-                    style={{
-                      background: selectedPR?.id === pr.id ? '#2563eb' : '#f3f4f6',
-                      color: selectedPR?.id === pr.id ? 'white' : 'black',
-                      border: '1px solid #ccc',
-                      borderRadius: 4,
-                      padding: 8,
-                      width: '100%',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => handleSelectPR(pr)}
-                    disabled={generating}
-                  >
-                    <strong>{pr.headline || '[No Headline]'}</strong>
-                    <br />
-                    <span style={{ fontSize: 12, color: '#666' }}>
-                      <LocalDate dateString={pr.created} />
-                    </span>
-                    <br />
-                    <span style={{ fontSize: 13, color: selectedPR?.id === pr.id ? 'white' : '#444' }}>
-                      {pr.body && pr.body !== '[No body text]'
-                        ? pr.body.substring(0, 100) + (pr.body.length > 100 ? '...' : '')
-                        : '[No body text]'}
-                    </span>
-                    {pr.url && (
-                      <>
-                        <br />
-                        <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ color: selectedPR?.id === pr.id ? 'white' : '#2563eb', textDecoration: 'underline', fontSize: 13 }}>
-                          View Full PR
-                        </a>
-                      </>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-      {tenArticlesError && <div style={{ color: 'red', marginBottom: 10 }}>{tenArticlesError}</div>}
-      {tenNewestArticles.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h2>10 Newest Newsfeed Posts</h2>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {tenNewestArticles.map(article => {
-              // Hide unselected articles if hideUnselectedArticles is true and this article is not selected
-              if (hideUnselectedArticles && selectedArticle?.id !== article.id) {
-                return null;
-              }
-              return (
-                <li key={article.id} style={{ marginBottom: 10 }}>
-                  <button
-                    style={{
-                      background: selectedArticle?.id === article.id ? '#2563eb' : '#f3f4f6',
-                      color: selectedArticle?.id === article.id ? 'white' : 'black',
-                      border: '1px solid #ccc',
-                      borderRadius: 4,
-                      padding: 8,
-                      width: '100%',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => handleSelectArticle(article)}
-                    disabled={generating}
-                  >
-                    <strong>{article.headline || '[No Headline]'}</strong>
-                    <br />
-                    <span style={{ fontSize: 12, color: '#666' }}>
-                      <LocalDate dateString={article.created} />
-                    </span>
-                    <br />
-                    <span style={{ fontSize: 13, color: selectedArticle?.id === article.id ? 'white' : '#444' }}>
-                      {article.body && article.body !== '[No body text]'
-                        ? article.body.substring(0, 100) + (article.body.length > 100 ? '...' : '')
-                        : '[No body text]'}
-                    </span>
-                    {article.url && (
-                      <>
-                        <br />
-                        <a href={article.url} target="_blank" rel="noopener noreferrer" style={{ color: selectedArticle?.id === article.id ? 'white' : '#2563eb', textDecoration: 'underline', fontSize: 13 }}>
-                          View Full Article
-                        </a>
-                      </>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
 
-      {/* Show textarea and generate button for selected PR, article, or analyst note */}
-      {(selectedPR || selectedArticle || primaryText) && (
+      {/* Show textarea and generate button for scraped content */}
+      {primaryText && (
         <div style={{ marginBottom: 20 }}>
-          <h2>
-            {selectedPR ? 'Selected PR' : 
-             selectedArticle ? 'Selected Article' : 
-             primaryText ? 'Scraped Content' : 'Analyst Note Content'}
-          </h2>
+          <h2>Content</h2>
           <div style={{ background: '#f9fafb', padding: 10, borderRadius: 4, marginBottom: 10 }}>
-            {selectedPR && (
-              <>
-                <strong>{selectedPR.headline}</strong>
-                <br />
-                <LocalDate dateString={selectedPR.created} />
-              </>
-            )}
-            {selectedArticle && (
-              <>
-                <strong>{selectedArticle.headline}</strong>
-                <br />
-                <LocalDate dateString={selectedArticle.created} />
-              </>
-            )}
-            {!selectedPR && !selectedArticle && primaryText && ticker && (
+            {primaryText && ticker && (
               <strong>Content for {ticker}</strong>
             )}
-            {!selectedPR && !selectedArticle && primaryText && !ticker && (
+            {primaryText && !ticker && (
               <strong>Scraped Content (Enter ticker above)</strong>
             )}
             <textarea
@@ -3047,18 +2254,121 @@ Return the complete article with only the problematic sentences rewritten, keepi
               rows={16}
               style={{ width: '100%', fontFamily: 'monospace', fontSize: 14, marginTop: 10 }}
             />
-            {(selectedPR ? selectedPR.url : selectedArticle?.url) && (
-              <div style={{ marginTop: 8 }}>
-                <a
-                  href={selectedPR ? selectedPR.url : selectedArticle.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: '#2563eb', textDecoration: 'underline', fontSize: 13 }}
-                >
-                  View Full {selectedPR ? 'PR' : 'Article'}
-                </a>
+          </div>
+        </div>
+      )}
+
+      {/* Copyleaks Comparison Modal */}
+      {showCopyleaksModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+          }}>
+            <h3 style={{ 
+              margin: '0 0 16px 0', 
+              fontSize: '20px', 
+              fontWeight: 'bold',
+              color: '#1f2937'
+            }}>
+              📋 Copy Articles for Copyleaks Comparison
+            </h3>
+            
+            <p style={{ 
+              margin: '0 0 20px 0', 
+              fontSize: '14px', 
+              color: '#6b7280',
+              lineHeight: '1.5'
+            }}>
+              Copyleaks has been opened in a new tab. Use the buttons below to copy each article separately:
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+                  <button
+                onClick={copySourceArticle}
+                    style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  backgroundColor: sourceCopied ? '#10b981' : '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                {sourceCopied ? '✅ Copied!' : '📄 Copy Source Article'}
+                  </button>
+              
+                  <button
+                onClick={copyGeneratedArticle}
+                    style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  backgroundColor: generatedCopied ? '#10b981' : '#059669',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                {generatedCopied ? '✅ Copied!' : '✍️ Copy Generated Article'}
+                  </button>
+        </div>
+
+            <div style={{
+              backgroundColor: '#f3f4f6',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>
+                📋 Instructions:
+              </h4>
+              <ol style={{ margin: '0', paddingLeft: '20px', fontSize: '14px', lineHeight: '1.6' }}>
+                <li>Click "Copy Source Article" and paste it into the <strong>first field</strong> in Copyleaks</li>
+                <li>Click "Copy Generated Article" and paste it into the <strong>second field</strong> in Copyleaks</li>
+                <li>Click the "Compare" button in Copyleaks to analyze</li>
+              </ol>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowCopyleaksModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
               </div>
-            )}
           </div>
         </div>
       )}

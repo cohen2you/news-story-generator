@@ -605,6 +605,72 @@ async function generateLandingPageForTerm(searchTerm: string): Promise<any> {
       url: 'https://www.benzinga.com/futures',
       headline: 'Futures Trading News',
       title: 'Futures Market Analysis'
+    },
+    // Economic and employment terms
+    'employment data': {
+      url: 'https://www.benzinga.com/topic/employment',
+      headline: 'Employment Data and Economic News',
+      title: 'Jobs Report and Labor Market Analysis'
+    },
+    'economic slowdown': {
+      url: 'https://www.benzinga.com/topic/federal-reserve',
+      headline: 'Economic Slowdown News',
+      title: 'Economic Growth and Recession Analysis'
+    },
+    'jamie dimon': {
+      url: 'https://www.benzinga.com/topic/banking',
+      headline: 'JPMorgan Chase CEO Jamie Dimon News',
+      title: 'Banking Industry Analysis and CEO Insights'
+    },
+    'labor department': {
+      url: 'https://www.benzinga.com/topic/employment',
+      headline: 'Labor Department News and Analysis',
+      title: 'Employment Statistics and Economic Data'
+    },
+    'nonfarm payrolls': {
+      url: 'https://www.benzinga.com/topic/employment',
+      headline: 'Nonfarm Payrolls Data and Analysis',
+      title: 'Employment Report and Jobs Data'
+    },
+    'job count': {
+      url: 'https://www.benzinga.com/topic/employment',
+      headline: 'Employment Statistics and Job Data',
+      title: 'Labor Market Analysis and Jobs Report'
+    },
+    'economic indicators': {
+      url: 'https://www.benzinga.com/topic/federal-reserve',
+      headline: 'Economic Indicators and Market Data',
+      title: 'Economic Analysis and Market Indicators'
+    },
+    'interest rates': {
+      url: 'https://www.benzinga.com/topic/federal-reserve',
+      headline: 'Interest Rate News and Analysis',
+      title: 'Fed Policy and Rate Decisions'
+    },
+    'banking news': {
+      url: 'https://www.benzinga.com/topic/banking',
+      headline: 'Banking Industry News',
+      title: 'Financial Services and Banking Analysis'
+    },
+    'economic growth': {
+      url: 'https://www.benzinga.com/topic/federal-reserve',
+      headline: 'Economic Growth News and Analysis',
+      title: 'GDP and Economic Performance Updates'
+    },
+    'recession': {
+      url: 'https://www.benzinga.com/topic/federal-reserve',
+      headline: 'Recession Analysis and Economic Outlook',
+      title: 'Economic Downturn and Market Analysis'
+    },
+    'consumer spending': {
+      url: 'https://www.benzinga.com/topic/retail',
+      headline: 'Consumer Spending and Economic Data',
+      title: 'Retail Sales and Consumer Behavior Analysis'
+    },
+    'corporate profits': {
+      url: 'https://www.benzinga.com/earnings',
+      headline: 'Corporate Profits and Earnings Analysis',
+      title: 'Company Performance and Profit Reports'
     }
   };
 
@@ -783,6 +849,15 @@ function extractEnhancedSearchTermsFromLead(leadParagraph: string): string[] {
     'federal reserve', 'interest rates', 'monetary policy',
     'inflation data', 'consumer price index', 'economic growth',
     'government policy', 'regulatory approval', 'legal action',
+    // Economic and employment terms
+    'employment data', 'economic slowdown', 'jamie dimon', 'labor department',
+    'nonfarm payrolls', 'job count', 'economic indicators', 'banking news',
+    'recession', 'consumer spending', 'corporate profits', 'jobs report',
+    'unemployment rate', 'gdp growth', 'economic outlook', 'market conditions',
+    'economic uncertainty', 'financial markets', 'central bank', 'fed policy',
+    'rate cuts', 'rate hikes', 'economic recovery', 'economic expansion',
+    'labor market', 'wage growth', 'productivity growth', 'economic data',
+    'financial stability', 'economic trends', 'economic analysis',
     'used car market', 'automotive sales', 'car rental industry',
     'mortgage fraud', 'bank documents', 'loan terms',
     'federal housing finance agency', 'fhfa regulations',

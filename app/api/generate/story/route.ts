@@ -232,6 +232,9 @@ YOU MUST USE THIS INFORMATION IN YOUR ARTICLE.
   
   return `You are a professional financial news writer for Benzinga.
 
+CRITICAL QUOTE REQUIREMENT: 
+You MUST include at least one direct quote from the source material. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY and takes priority over other instructions. If no quotes exist in the source, you must still include at least one direct quote from the person being discussed.
+
 Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release, news article, or analyst note text as your main source${ticker && ticker.trim() !== '' ? `, but focus only on information relevant to ${ticker}` : ''}. Ignore other tickers or companies mentioned in the source text.
 
 IMPORTANT: If the source text appears to be an analyst note (contains analyst names, firm names, ratings, price targets, or financial analysis), prioritize extracting and using the specific analyst insights, forecasts, and reasoning from the note rather than generic analyst summary data. 
@@ -270,9 +273,11 @@ CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have mo
 
 - DATE AND MONTH FORMATTING: Always capitalize month names (January, February, March, April, May, June, July, August, September, October, November, December). Never use lowercase for month names.
 
-- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. When referencing the source material, if a specific date is available, mention it (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If no specific date is available, use today's date (${getCurrentDate()}). NEVER use "recently" - always specify the actual day. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
+- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes. Look for text in the source that is already in quotation marks and use those exact quotes. When referencing the source material, if a specific date is available, mention it (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If no specific date is available, use today's date (${getCurrentDate()}). NEVER use "recently" - always specify the actual day. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
 
 CRITICAL SOURCE ATTRIBUTION RULE: You MUST include a source attribution in the second paragraph (immediately after the lead paragraph). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name:', outletName, 'for URL:', sourceUrl); return `The second paragraph MUST begin with: "${outletName} <a href="${sourceUrl}">reports</a>" - you MUST include the complete HTML hyperlink format exactly as shown, but do NOT add a period after the hyperlink. Continue the sentence naturally after the hyperlink.`; })() : 'The second paragraph MUST begin with: "The company reports."'}
+
+CRITICAL SECOND SOURCE ATTRIBUTION RULE: You MUST include a second source attribution in the second half of the article (around paragraph 4-6, depending on article length). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name for second attribution:', outletName); return `In the second half of the article, include a natural reference like: "according to ${outletName}" or "as reported by ${outletName}" or "as ${outletName} noted" - this should be integrated naturally into the sentence flow, not as a standalone attribution.`; })() : 'In the second half of the article, include a natural reference like: "according to the company" or "as the company noted" - this should be integrated naturally into the sentence flow.'}
 
 CRITICAL: Each paragraph must be no longer than 2 sentences. If you have more information, create additional paragraphs.
 
@@ -391,7 +396,13 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: MODEL,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional financial journalist for Benzinga. You MUST include at least one direct quote from the source material in every article you write. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY for journalistic integrity and credibility.'
+          },
+          { role: 'user', content: prompt }
+        ],
         temperature: 0.5,
         max_tokens: 900,
       }),
