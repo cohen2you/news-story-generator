@@ -13,15 +13,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // Step 1: Extract and preserve all hyperlinks
+    // Step 1: Extract and preserve all hyperlinks and subheads
     const hyperlinkRegex = /<a[^>]+>.*?<\/a>/g;
     const hyperlinks = article.match(hyperlinkRegex) || [];
     const hyperlinkPlaceholders = hyperlinks.map((_: string, index: number) => `[HYPERLINK_${index}]`);
     
-    // Replace hyperlinks with placeholders
+    // Extract subheads (standalone lines that look like headings, not inside <p> tags)
+    const subheadRegex = /^(?![<p>]).*$/gm;
+    const potentialSubheads = article.match(subheadRegex) || [];
+    const subheads = potentialSubheads.filter((line: string) => 
+      line.trim() && 
+      !line.includes('<p>') && 
+      !line.includes('</p>') && 
+      !line.includes('Read Next:') && 
+      !line.includes('Price Action:') &&
+      !line.includes('<a href') &&
+      line.length < 100 && // Subheads are typically shorter
+      line.length > 3 && // But not too short
+      !line.match(/^[A-Z\s]+$/) // Not all caps (likely not a subhead)
+    );
+    
+    const subheadPlaceholders = subheads.map((_: string, index: number) => `[SUBHEAD_${index}]`);
+    
+    // Replace hyperlinks and subheads with placeholders
     let articleWithoutLinks = article;
     hyperlinks.forEach((link: string, index: number) => {
       articleWithoutLinks = articleWithoutLinks.replace(link, `[HYPERLINK_${index}]`);
+    });
+    
+    subheads.forEach((subhead: string, index: number) => {
+      articleWithoutLinks = articleWithoutLinks.replace(subhead, `[SUBHEAD_${index}]`);
     });
 
     // Step 2: Condense the content without hyperlinks
@@ -31,10 +52,11 @@ export async function POST(req: Request) {
 2. Removing redundant phrases and unnecessary words  
 3. Combining similar ideas into single, more concise statements
 4. NEVER remove or modify any [HYPERLINK_X] placeholders - they are sacred and must be preserved exactly
-5. NEVER remove the "Read Next" section
-6. CRITICAL: Maintain all HTML paragraph tags (<p> and </p>) - you may combine paragraphs but do NOT remove paragraph tags
-7. CRITICAL: Do NOT remove or modify any HTML formatting - preserve the structure
-8. CRITICAL: If you combine paragraphs, merge the content but keep the <p> tags around the merged content
+5. NEVER remove or modify any [SUBHEAD_X] placeholders - they are sacred and must be preserved exactly
+6. NEVER remove the "Read Next" section
+7. CRITICAL: Maintain all HTML paragraph tags (<p> and </p>) - you may combine paragraphs but do NOT remove paragraph tags
+8. CRITICAL: Do NOT remove or modify any HTML formatting - preserve the structure
+9. CRITICAL: If you combine paragraphs, merge the content but keep the <p> tags around the merged content
 
 SOURCE MATERIAL (for similarity checking):
 ${sourceText || 'No source material provided'}
@@ -60,7 +82,7 @@ CHANGES MADE:
     
     let condensedArticle = condensedMatch ? condensedMatch[1].trim() : condensedResult;
 
-    // Step 3: Restore hyperlinks to their original positions
+    // Step 3: Restore hyperlinks and subheads to their original positions
     let finalArticle = condensedArticle;
     hyperlinks.forEach((link: string, index: number) => {
       const placeholder = `[HYPERLINK_${index}]`;
@@ -68,22 +90,42 @@ CHANGES MADE:
         finalArticle = finalArticle.replace(placeholder, link);
       }
     });
+    
+    subheads.forEach((subhead: string, index: number) => {
+      const placeholder = `[SUBHEAD_${index}]`;
+      if (finalArticle.includes(placeholder)) {
+        finalArticle = finalArticle.replace(placeholder, subhead);
+      }
+    });
 
-    // Validate that all hyperlinks were restored
+    // Validate that all hyperlinks and subheads were restored
     const finalLinks = (finalArticle.match(/<a[^>]+>.*?<\/a>/g) || []).length;
     const originalLinks = hyperlinks.length;
+    
+    // Check subhead preservation (count non-empty lines that aren't paragraphs or special sections)
+    const finalSubheads = finalArticle.split('\n').filter((line: string) => 
+      line.trim() && 
+      !line.includes('<p>') && 
+      !line.includes('</p>') && 
+      !line.includes('Read Next:') && 
+      !line.includes('Price Action:') &&
+      !line.includes('<a href') &&
+      line.length < 100 &&
+      line.length > 3
+    ).length;
+    const originalSubheads = subheads.length;
     
     // More lenient paragraph validation - check if we have reasonable paragraph structure
     const originalParagraphs = (article.match(/<p>/g) || []).length;
     const finalParagraphs = (finalArticle.match(/<p>/g) || []).length;
     const paragraphRatio = finalParagraphs / originalParagraphs;
     
-    console.log(`Editorial review validation: Links ${finalLinks}/${originalLinks}, Paragraphs ${finalParagraphs}/${originalParagraphs} (ratio: ${paragraphRatio.toFixed(2)})`);
+    console.log(`Editorial review validation: Links ${finalLinks}/${originalLinks}, Subheads ${finalSubheads}/${originalSubheads}, Paragraphs ${finalParagraphs}/${originalParagraphs} (ratio: ${paragraphRatio.toFixed(2)})`);
     
-    // Only fail if hyperlinks are missing OR if we've lost more than 50% of paragraphs
-    if (finalLinks !== originalLinks || paragraphRatio < 0.5) {
-      console.log(`Editorial review failed: ${finalLinks !== originalLinks ? 'hyperlink mismatch' : 'paragraph structure lost'}`);
-      // If hyperlinks or significant paragraph structure were lost, return the original article with a warning
+    // Only fail if hyperlinks are missing OR if we've lost more than 50% of paragraphs OR if subheads were lost
+    if (finalLinks !== originalLinks || paragraphRatio < 0.5 || (originalSubheads > 0 && finalSubheads < originalSubheads)) {
+      console.log(`Editorial review failed: ${finalLinks !== originalLinks ? 'hyperlink mismatch' : paragraphRatio < 0.5 ? 'paragraph structure lost' : 'subheads lost'}`);
+      // If hyperlinks, subheads, or significant paragraph structure were lost, return the original article with a warning
       return NextResponse.json({ 
         reviewedArticle: article,
         changes: ['Editorial review skipped - formatting preservation failed'],
@@ -91,6 +133,8 @@ CHANGES MADE:
         newWordCount: article.split(/\s+/).length,
         warning: finalLinks !== originalLinks 
           ? `Could not preserve all hyperlinks during condensation (${finalLinks}/${originalLinks} preserved)`
+          : (originalSubheads > 0 && finalSubheads < originalSubheads)
+          ? `Could not preserve all subheads during condensation (${finalSubheads}/${originalSubheads} preserved)`
           : `Could not preserve paragraph structure during condensation (${finalParagraphs}/${originalParagraphs} preserved)`
       });
     }
