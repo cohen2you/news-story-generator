@@ -171,7 +171,7 @@ function extractKeyTopics(text: string): string[] {
   return topics.slice(0, 5); // Return top 5 topics
 }
 
-function buildPrompt({ ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts }: { ticker: string; sourceText: string; analystSummary: string; priceSummary: string; priceActionDay?: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[] }) {
+function buildPrompt({ ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts, inputMode = 'news' }: { ticker: string; sourceText: string; analystSummary: string; priceSummary: string; priceActionDay?: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[]; inputMode?: string }) {
   
   console.log('buildPrompt called with sourceUrl:', sourceUrl);
   console.log('sourceUrl type:', typeof sourceUrl);
@@ -275,9 +275,15 @@ CRITICAL: The lead paragraph must be exactly 2 sentences maximum. If you have mo
 
 - Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes. Look for text in the source that is already in quotation marks and use those exact quotes. When referencing the source material, if a specific date is available, mention it (e.g., "In a press release dated ${sourceDateFormatted}" or "According to the ${sourceDateFormatted} announcement"). If no specific date is available, use today's date (${getCurrentDate()}). NEVER use "recently" - always specify the actual day. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
 
+${inputMode === 'pr' ? `
+CRITICAL PRESS RELEASE HYPERLINK RULE: You MUST include a three-word hyperlink to the press release in the lead paragraph. ${sourceUrl ? `The lead paragraph MUST contain exactly one hyperlink using this exact format: <a href="${sourceUrl}">three word phrase</a> - where "three word phrase" is a relevant three-word phrase from the sentence (e.g., "press release states", "company announcement", "official statement"). Embed this hyperlink naturally within the sentence flow, not at the end.` : 'The lead paragraph MUST contain a reference to the press release if a URL is provided.'}
+
+CRITICAL PRESS RELEASE FORMATTING: This is an internal press release, so do NOT include any external source attributions like "reports" or "according to [publication]". The press release is the primary source.
+` : `
 CRITICAL SOURCE ATTRIBUTION RULE: You MUST include a source attribution in the second paragraph (immediately after the lead paragraph). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name:', outletName, 'for URL:', sourceUrl); return `The second paragraph MUST begin with: "${outletName} <a href="${sourceUrl}">reports</a>" - you MUST include the complete HTML hyperlink format exactly as shown, but do NOT add a period after the hyperlink. Continue the sentence naturally after the hyperlink.`; })() : 'The second paragraph MUST begin with: "The company reports."'}
 
 CRITICAL SECOND SOURCE ATTRIBUTION RULE: You MUST include a second source attribution in the second half of the article (around paragraph 4-6, depending on article length). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name for second attribution:', outletName); return `In the second half of the article, include a natural reference like: "according to ${outletName}" or "as reported by ${outletName}" or "as ${outletName} noted" - this should be integrated naturally into the sentence flow, not as a standalone attribution.`; })() : 'In the second half of the article, include a natural reference like: "according to the company" or "as the company noted" - this should be integrated naturally into the sentence flow.'}
+`}
 
 CRITICAL: Each paragraph must be no longer than 2 sentences. If you have more information, create additional paragraphs.
 
@@ -369,7 +375,7 @@ Write the article now.`;
 
 export async function POST(req: Request) {
   try {
-    const { ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts } = await req.json();
+    const { ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, inputMode = 'news' } = await req.json();
     if (!sourceText) return NextResponse.json({ error: 'Source text is required.' }, { status: 400 });
     // Ticker is optional - no validation required
     console.log('Prompt priceSummary:', priceSummary); // Log the priceSummary
@@ -384,7 +390,7 @@ export async function POST(req: Request) {
     console.log('Ticker provided:', ticker);
     
     console.log('Building prompt with sourceUrl:', sourceUrl);
-    const prompt = buildPrompt({ ticker, sourceText, analystSummary: analystSummary || '', priceSummary: priceSummary || '', priceActionDay, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts });
+    const prompt = buildPrompt({ ticker, sourceText, analystSummary: analystSummary || '', priceSummary: priceSummary || '', priceActionDay, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts, inputMode });
     console.log('Related articles in prompt:', relatedArticles.length);
     console.log('First related article:', relatedArticles[0]?.headline);
     console.log('Prompt preview (first 500 chars):', prompt.substring(0, 500));
@@ -420,48 +426,52 @@ export async function POST(req: Request) {
     // Note: Hyperlinks are now handled separately via the "Add Lead Hyperlink" feature
     // This allows for better control and more relevant hyperlink selection
     
-    // Fix any blank URLs in source attribution
-    console.log('Processing source attribution...');
-    if (!sourceUrl) {
-      console.log('No source URL - removing hyperlinks from reports');
-      // Remove hyperlinks from "reports" when there's no source URL
-      story = story.replace(/<a href="[^"]*">reports<\/a>/g, 'reports');
-    } else {
-      console.log('Fixing blank URLs in reports attribution');
-      // Fix any blank URLs (href="#" or href="") in reports attribution
-      const beforeFix = story.includes('reports');
-      story = story.replace(/<a href="[#"]*">reports<\/a>/g, `<a href="${sourceUrl}">reports</a>`);
-      const afterFix = story.includes(`href="${sourceUrl}">reports</a>`);
-      console.log('Reports attribution fixed:', beforeFix, '->', afterFix);
-      
-      // Also check if "reports" exists but isn't hyperlinked and add hyperlink
-      if (story.includes('reports') && !story.includes(`href="${sourceUrl}">reports</a>`)) {
-        console.log('Adding missing hyperlink to reports');
-        // Look for patterns like "CNBC reports." or "The company reports." and add hyperlink
-        // Make sure the period comes after the hyperlink, not inside it
-        story = story.replace(/([A-Z][a-z]+)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
-        story = story.replace(/(The company)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
+    // Fix any blank URLs in source attribution (skip for PR mode)
+    if (inputMode !== 'pr') {
+      console.log('Processing source attribution...');
+      if (!sourceUrl) {
+        console.log('No source URL - removing hyperlinks from reports');
+        // Remove hyperlinks from "reports" when there's no source URL
+        story = story.replace(/<a href="[^"]*">reports<\/a>/g, 'reports');
+      } else {
+        console.log('Fixing blank URLs in reports attribution');
+        // Fix any blank URLs (href="#" or href="") in reports attribution
+        const beforeFix = story.includes('reports');
+        story = story.replace(/<a href="[#"]*">reports<\/a>/g, `<a href="${sourceUrl}">reports</a>`);
+        const afterFix = story.includes(`href="${sourceUrl}">reports</a>`);
+        console.log('Reports attribution fixed:', beforeFix, '->', afterFix);
         
-        // Also handle cases where "reports" appears without a period at the end of a sentence
-        story = story.replace(/([A-Z][a-z]+)\s+reports\s+/g, `$1 <a href="${sourceUrl}">reports</a> `);
-        story = story.replace(/(The company)\s+reports\s+/g, `$1 <a href="${sourceUrl}">reports</a> `);
-      }
-      
-      // CRITICAL: If no source attribution exists at all, add it after the lead paragraph
-      if (!story.includes('reports')) {
-        console.log('No source attribution found - adding it after lead paragraph');
-        const outletName = getOutletNameFromUrl(sourceUrl);
-        const sourceAttribution = `<p>${outletName} <a href="${sourceUrl}">reports</a>.</p>`;
+        // Also check if "reports" exists but isn't hyperlinked and add hyperlink
+        if (story.includes('reports') && !story.includes(`href="${sourceUrl}">reports</a>`)) {
+          console.log('Adding missing hyperlink to reports');
+          // Look for patterns like "CNBC reports." or "The company reports." and add hyperlink
+          // Make sure the period comes after the hyperlink, not inside it
+          story = story.replace(/([A-Z][a-z]+)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
+          story = story.replace(/(The company)\s+reports\./g, `$1 <a href="${sourceUrl}">reports</a>.`);
+          
+          // Also handle cases where "reports" appears without a period at the end of a sentence
+          story = story.replace(/([A-Z][a-z]+)\s+reports\s+/g, `$1 <a href="${sourceUrl}">reports</a> `);
+          story = story.replace(/(The company)\s+reports\s+/g, `$1 <a href="${sourceUrl}">reports</a> `);
+        }
         
-        // Split into paragraphs and insert after the first paragraph (lead)
-        const paragraphs = story.split('</p>');
-        if (paragraphs.length >= 2) {
-          // Insert after the lead paragraph (index 1)
-          paragraphs.splice(1, 0, sourceAttribution);
-          story = paragraphs.join('</p>');
-          console.log('Added source attribution after lead paragraph');
+        // CRITICAL: If no source attribution exists at all, add it after the lead paragraph
+        if (!story.includes('reports')) {
+          console.log('No source attribution found - adding it after lead paragraph');
+          const outletName = getOutletNameFromUrl(sourceUrl);
+          const sourceAttribution = `<p>${outletName} <a href="${sourceUrl}">reports</a>.</p>`;
+          
+          // Split into paragraphs and insert after the first paragraph (lead)
+          const paragraphs = story.split('</p>');
+          if (paragraphs.length >= 2) {
+            // Insert after the lead paragraph (index 1)
+            paragraphs.splice(1, 0, sourceAttribution);
+            story = paragraphs.join('</p>');
+            console.log('Added source attribution after lead paragraph');
+          }
         }
       }
+    } else {
+      console.log('PR mode - skipping source attribution processing');
     }
     
     // Ensure "Also Read" and "Read Next" sections are included if related articles are available

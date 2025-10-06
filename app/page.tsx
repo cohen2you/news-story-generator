@@ -38,6 +38,7 @@ export default function PRStoryGeneratorPage() {
   const [showCopyleaksModal, setShowCopyleaksModal] = useState(false);
   const [sourceCopied, setSourceCopied] = useState(false);
   const [generatedCopied, setGeneratedCopied] = useState(false);
+  const [inputMode, setInputMode] = useState<'news' | 'pr'>('news');
   const [articleBeforeContext, setArticleBeforeContext] = useState('');
 
   // Function to compare articles using Copyleaks with modal interface
@@ -390,6 +391,7 @@ export default function PRStoryGeneratorPage() {
            ctaText,
            includeSubheads,
            subheadTexts,
+           inputMode: inputMode,
        };
       
       console.log('Sending to story generation:', requestBody); // Debug log
@@ -578,6 +580,7 @@ export default function PRStoryGeneratorPage() {
     setEditorialReviewChanges([]);
     setEditorialReviewStats({ originalWordCount: 0, newWordCount: 0 });
     setArticleBeforeContext('');
+    setInputMode('news');
   };
 
 
@@ -1231,10 +1234,40 @@ export default function PRStoryGeneratorPage() {
         )}
       </div>
       
+      {/* Input Mode Toggle */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>
+          Content Type:
+        </label>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="inputMode"
+              value="news"
+              checked={inputMode === 'news'}
+              onChange={(e) => setInputMode(e.target.value as 'news' | 'pr')}
+              style={{ marginRight: 8 }}
+            />
+            News Article (with source attribution)
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="inputMode"
+              value="pr"
+              checked={inputMode === 'pr'}
+              onChange={(e) => setInputMode(e.target.value as 'news' | 'pr')}
+              style={{ marginRight: 8 }}
+            />
+            Press Release (internal, no attribution)
+          </label>
+        </div>
+      </div>
       
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', marginBottom: 8 }}>
-          Source URL (optional):
+          {inputMode === 'news' ? 'Source URL (optional):' : 'Press Release URL (optional):'}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input
               type="url"

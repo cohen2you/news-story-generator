@@ -29,14 +29,26 @@ export async function POST(req: Request) {
     // Load HTML into cheerio
     const $ = cheerio.load(html);
     
-    // Remove unwanted elements
-    $('script, style, nav, header, footer, aside, .advertisement, .ad, .sidebar, .menu, .navigation').remove();
+    // Remove ALL unwanted elements aggressively - images, logos, tickers, etc.
+    $('script, style, nav, header, footer, aside, .advertisement, .ad, .sidebar, .menu, .navigation, .social-share, .share-buttons, .comments, .related-articles, .newsletter, .subscribe, .cookie-notice, .popup, .modal').remove();
+    
+    // Remove ALL images and logo-related elements
+    $('img, picture, svg, .logo, .ticker, .stock-price, .price-info, .market-data, .follow-button, .follow, .overview, .market-data, .price-display, .ticker-symbol, .bz-ticker, .bz-price, .bz-logo, .bz-follow, .bz-overview, .bz-market-data, [class*="logo"], [class*="ticker"], [class*="price"], [id*="logo"], [id*="ticker"], [id*="price"]').remove();
+    
+    // Remove elements that contain only stock symbols or prices
+    $('*').each(function() {
+      const $el = $(this);
+      const text = $el.text().trim();
+      if (text.match(/^[A-Z]{1,5}\$[\d,]+\.?\d*\s*[+-]?\d*\.?\d*%?$/)) {
+        $el.remove();
+      }
+    });
     
     let articleText = '';
     
-    // Try multiple strategies to find article content
+    // Try multiple strategies to find article content (same as news articles)
     const strategies = [
-      // Strategy 1: Look for article tag
+      // Strategy 1: Look for article tag (same as news)
       () => {
         const article = $('article').first();
         if (article.length) {
@@ -46,7 +58,7 @@ export async function POST(req: Request) {
         return '';
       },
       
-      // Strategy 2: Look for main content areas
+      // Strategy 2: Look for main content areas (same as news)
       () => {
         const selectors = [
           '[role="main"]',
@@ -58,7 +70,14 @@ export async function POST(req: Request) {
           '.main-content',
           '#main-content',
           '.article-body',
-          '.story-body'
+          '.story-body',
+          // Add PR-specific selectors
+          '.press-release',
+          '.pr-content',
+          '.announcement',
+          '.company-news',
+          '.earnings-release',
+          '.financial-news'
         ];
         
         for (const selector of selectors) {
@@ -71,7 +90,7 @@ export async function POST(req: Request) {
         return '';
       },
       
-      // Strategy 3: Look for headline and extract following content
+      // Strategy 3: Look for headline and extract following content (same as news)
       () => {
         const headline = $('h1').first();
         if (headline.length) {
@@ -83,8 +102,17 @@ export async function POST(req: Request) {
             // Check if this container has substantial text content
             const text = container.text().trim();
             if (text.length > 500) {
-              console.log('Found substantial content in headline container');
-              return text;
+              // Check if this content is mostly images or actual text
+              const textWithoutImages = text.replace(/<[^>]*>/g, '').trim();
+              const actualTextLength = textWithoutImages.length;
+              
+              // Only accept if it has substantial actual text (not just images)
+              if (actualTextLength > 300) {
+                console.log('Found substantial text content in headline container');
+                return text;
+              } else {
+                console.log('Headline container has content but mostly images, skipping');
+              }
             }
             container = container.parent();
           }
@@ -92,7 +120,7 @@ export async function POST(req: Request) {
         return '';
       },
       
-      // Strategy 4: Extract all paragraphs and combine
+      // Strategy 4: Extract all paragraphs and combine (same as news)
       () => {
         const paragraphs = $('p').map((i, el) => $(el).text().trim()).get();
         const validParagraphs = paragraphs.filter(p => 
@@ -118,6 +146,10 @@ export async function POST(req: Request) {
     // Try each strategy until we get substantial content
     for (let i = 0; i < strategies.length; i++) {
       const content = strategies[i]();
+      console.log(`Strategy ${i + 1} found ${content.length} chars`);
+      if (content.length > 50) { // Lower threshold to see what strategies find
+        console.log(`Strategy ${i + 1} content preview:`, content.substring(0, 200));
+      }
       if (content.length > 200) {
         articleText = content;
         console.log(`Strategy ${i + 1} successful: ${content.length} chars`);
@@ -127,6 +159,9 @@ export async function POST(req: Request) {
     
     // Clean up the extracted text
     if (articleText) {
+      console.log('Text before cleaning (first 1000 chars):', articleText.substring(0, 1000));
+      console.log('Text before cleaning (last 500 chars):', articleText.substring(Math.max(0, articleText.length - 500)));
+      
       articleText = articleText
         .replace(/\s+/g, ' ')
         .replace(/&nbsp;/g, ' ')
@@ -135,7 +170,11 @@ export async function POST(req: Request) {
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#x27;/g, "'")
+        // Remove HTML img tags only
+        .replace(/<img[^>]*>/g, '') // Remove img tags
         .trim();
+        
+      console.log('Text after cleaning:', articleText.substring(0, 500));
       
       // Limit to 10000 characters
       if (articleText.length > 10000) {
@@ -146,7 +185,7 @@ export async function POST(req: Request) {
     console.log('Final extracted text length:', articleText.length);
     console.log('Text preview:', articleText.substring(0, 200));
     
-    if (!articleText || articleText.length < 100) {
+    if (!articleText || articleText.length < 50) {
       return NextResponse.json({ error: 'Could not extract article content' }, { status: 400 });
     }
 

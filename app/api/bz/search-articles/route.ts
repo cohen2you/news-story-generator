@@ -189,14 +189,21 @@ export async function POST(request: Request) {
             };
           })
           .filter(item => {
-            // For person name searches (2 words), require exact phrase match
+            // For person name searches (2-3 words), require exact phrase match
             const searchWords = searchTerm.toLowerCase().split(/\s+/).filter((word: string) => word.length > 2);
-            if (searchWords.length === 2) {
+            if (searchWords.length === 2 || searchWords.length === 3) {
               // For person names, only return articles that contain the exact phrase
               const headlineLower = (item.headline || '').toLowerCase();
               const bodyLower = (item.body || '').toLowerCase();
               const exactPhrase = searchTerm.toLowerCase();
-              return headlineLower.includes(exactPhrase) || bodyLower.includes(exactPhrase);
+              const hasExactPhrase = headlineLower.includes(exactPhrase) || bodyLower.includes(exactPhrase);
+              
+              if (!hasExactPhrase) {
+                return false; // Filter out articles without exact phrase
+              }
+              
+              // If it has the exact phrase, it passes the person name filter
+              return true;
             }
             
             // Different thresholds based on date range for better fallback behavior
@@ -283,8 +290,8 @@ function processMultiwordSearch(searchTerm: string): string[] {
   if (searchTerm.includes(' ')) {
     const words = searchTerm.split(' ').filter(word => word.length > 2);
     
-    // For person names (2 words), be very conservative - only use exact phrase
-    if (words.length === 2) {
+    // For person names (2-3 words), be very conservative - only use exact phrase
+    if (words.length === 2 || words.length === 3) {
       // Only return the exact search term for person names
       return [searchTerm];
     }
@@ -337,8 +344,8 @@ function calculateEnhancedRelevanceScore(headline: string, body: string, searchT
   // Multiword search term processing
   const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 2);
   
-  // For person names (2 words), heavily penalize individual word matches
-  if (searchWords.length === 2) {
+  // For person names (2-3 words), heavily penalize individual word matches
+  if (searchWords.length === 2 || searchWords.length === 3) {
     // Only give small scores for individual word matches in person name searches
     searchWords.forEach(word => {
       if (headlineLower.includes(word)) {
