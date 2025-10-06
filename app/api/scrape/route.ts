@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     $('img, picture, svg, .logo, .ticker, .stock-price, .price-info, .market-data, .follow-button, .follow, .overview, .market-data, .price-display, .ticker-symbol, .bz-ticker, .bz-price, .bz-logo, .bz-follow, .bz-overview, .bz-market-data, [class*="logo"], [class*="ticker"], [class*="price"], [id*="logo"], [id*="ticker"], [id*="price"]').remove();
     
     // Remove elements that contain only stock symbols or prices
-    $('*').each(function() {
+    $('*').each(function(this: any) {
       const $el = $(this);
       const text = $el.text().trim();
       if (text.match(/^[A-Z]{1,5}\$[\d,]+\.?\d*\s*[+-]?\d*\.?\d*%?$/)) {
