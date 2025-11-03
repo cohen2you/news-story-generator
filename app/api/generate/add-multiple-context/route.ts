@@ -41,46 +41,150 @@ export async function POST(request: Request) {
         const isSubsequentArticle = i > 0;
         
         const prompt = `
-You are a financial journalist. ${isSubsequentArticle ? 'You are now adding ADDITIONAL context to an article that already has some context added.' : 'Given the current article and a selected Benzinga news article, create 1-2 very concise paragraphs that add relevant context to the current article.'}
+You are a financial journalist. ${isSubsequentArticle ? 'You are now adding ADDITIONAL context to an article that already has some context added.' : 'Given the current article and a selected Benzinga news article, create 1 very concise paragraph that adds relevant context to the current article.'}
 
 ${isSubsequentArticle ? 'CRITICAL: This is additional context being added to an existing article. Make sure this new context is UNIQUE and does not repeat or overlap with any existing context already in the article.' : 'CRITICAL: Focus ONLY on the specific content of the "Selected Benzinga Article" below.'}
 
-IMPORTANT EXAMPLE: If the main article refers to someone as "Johnson" and "Trump", then in your context paragraphs, you MUST also say "Johnson" and "Trump" - NOT "Brandon Johnson" and "Donald Trump". The naming convention must match exactly.
+IMPORTANT EXAMPLE: If the main article refers to someone as "Johnson" and "Trump", then in your context paragraph, you MUST also say "Johnson" and "Trump" - NOT "Brandon Johnson" and "Donald Trump". The naming convention must match exactly.
 
-Current Article (with any existing context):
-${workingArticle.substring(0, 1500)}
+Current Article (FULL TEXT - analyze completely):
+${workingArticle}
 
-Selected Benzinga Article to Add:
+Selected Benzinga Article to Add (FULL TEXT - analyze completely):
 Headline: ${article.headline}
-Content: ${article.body.substring(0, 500)}
+Content: ${article.body}
 Date: ${dateContext}
 
 Name Usage Patterns in Current Article:
 ${namePatterns}
 
+**CRITICAL STEP 1: ANALYZE BOTH ARTICLES FOR INTEGRATION**
+
+A. READ THE FULL CURRENT ARTICLE:
+   - What is the main topic/theme?
+   - What sections/themes are discussed?
+   - What tone and style is used?
+   - Where are there natural topic transitions?
+   - What information would benefit from additional context?
+
+B. READ THE FULL SELECTED BENZINGA ARTICLE:
+   - What is the main point of this article?
+   - What specific facts, numbers, and events does it contain?
+   - How does this relate to the current article's themes?
+   - What unique information does it add?
+
+C. IDENTIFY THEMATIC CONNECTION:
+   - Where in the current article does this context fit best thematically?
+   - Which section would benefit most from this background?
+   - How can this context enhance reader understanding?
+
+**STEP 2: EXTRACT SPECIFIC FACTS FROM THE BENZINGA ARTICLE**
+
+You MUST extract SPECIFIC, CONCRETE facts from the Selected Benzinga Article:
+
+**A. NUMBERS & PERCENTAGES (Write down EXACT figures):**
+   - Stock performance: ___% gain/loss
+   - Comparison metrics: vs S&P 500's ___% 
+   - Dollar amounts: $___ billion/million
+   - Price levels: declined to $___, climbed ___% 
+   - Time periods: over past ___ months/year
+
+**B. DATES & TIMEFRAMES (Be specific):**
+   - When did events occur? (Month/Year)
+   - How long ago? (e.g., "in August", "since May")
+   - Time comparisons: "first since ___"
+
+**C. SPECIFIC EVENTS & ACTIONS:**
+   - What technical pattern appeared? (Death Cross, Golden Cross, etc.)
+   - What did someone DO? (announced, stepped down, purchased, sold)
+   - What changed? (rating downgraded, shares declined, cash increased)
+
+**D. PEOPLE & QUOTES:**
+   - Who is named? What is their role/title?
+   - What did they ACTUALLY SAY? (Only direct quotes in quotation marks)
+
+**E. ARTICLE TYPE:**
+   - Is this current news or historical analysis?
+   - Is this about past events or ongoing situations?
+
+**CRITICAL RULES:**
+- DO NOT reference facts from the Current Article above - ONLY use facts from the Selected Benzinga Article
+- DO NOT make up numbers - use EXACT figures from the article
+- DO NOT say "Buffett noted/said" unless there's a direct quote
+- DO NOT write generic statements - extract SPECIFIC details
+
+**STEP 3: VERIFY YOUR EXTRACTION**
+Before writing, confirm you have extracted:
+- ✓ At least 3 specific numbers/percentages
+- ✓ At least 2 specific dates/timeframes  
+- ✓ At least 1 specific event or action
+- ✓ The main subject/topic of the article
+- ✓ How this context relates to the current article
+
+If you haven't extracted these, GO BACK and re-read the Selected Benzinga Article.
+
+**STEP 4: CRAFT SEAMLESS INTEGRATION**
+
+Now that you understand BOTH articles completely:
+
+1. **Write Context That Bridges**: Your paragraph should feel like a natural extension of the current article's narrative
+2. **Use Transitional Flow**: Consider what topics come before and after in the current article
+3. **Add Value**: Provide background that enhances the current story without repeating it
+4. **Maintain Tone**: Match the style and tone of the current article
+
+**STEP 5: WRITE YOUR PARAGRAPH**
 Requirements:
-1. Create 1-2 paragraphs that provide additional context SPECIFICALLY from this article's content
-2. Make the content relevant to the current article's topic but UNIQUE to this specific Benzinga article
-3. Keep each paragraph to EXACTLY 2 sentences maximum - no more, no less
-4. You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this exact format: <a href="${article.url}">actual three word phrase</a>
-4a. CRITICAL: The hyperlink MUST be present in your response - this is mandatory for each article
-5. Any additional paragraphs should have NO hyperlinks
-6. Make the content flow naturally with the current article
-7. Focus on providing valuable context that enhances the reader's understanding
-8. Use AP style and maintain a professional tone
-9. Keep paragraphs short and impactful - aim for 1-2 sentences each
-10. The hyperlink should be embedded within existing words in the text, not as "[source]" at the end
-11. Choose relevant three-word phrases within the sentences to hyperlink, such as company names, key terms, or action phrases
-12. CRITICAL: ONLY the first paragraph should contain exactly one hyperlink in the format specified above
-13. CRITICAL: Do NOT use phrases like "in an earlier article", "a recent article", "according to reports", or similar references - just embed the hyperlink naturally in the existing sentence structure
-14. CRITICAL: Replace "actual three word phrase" with a real three-word phrase from the sentence, such as "executive order signed", "federal immigration raids", "Democratic leaders resisting", etc.
-14. CRITICAL: Format the output with proper HTML paragraph tags. Each paragraph should be wrapped in <p> tags.
-15. CRITICAL: Ensure no paragraph has more than 2 sentences - break longer paragraphs into smaller ones
-16. UNIQUENESS REQUIREMENT: Make sure this context is SPECIFIC to this article's content and not generic. Focus on the unique details, facts, or insights from this specific Benzinga article.
-17. CRITICAL: You MUST use specific facts, numbers, quotes, or details from the article content above. Do NOT generate generic statements that could apply to any article about the same person/company.
-18. MANDATORY: Include at least one specific detail from the article (e.g., a number, quote, specific event, or unique fact) in your context paragraphs.
-19. FORBIDDEN: Do NOT write generic statements like "this follows Buffett's strategy" or "this aligns with company goals" unless you can connect it to a specific detail from the article.
-17. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
+1. Create EXACTLY 1 paragraph (2 sentences) using SPECIFIC FACTS from the Benzinga article
+2. MANDATORY: Include at least 3-4 specific details (numbers, dates, events) from the Benzinga article
+3. DO NOT reference facts from the Current Article - ONLY use facts from the Selected Benzinga Article
+4. Make it feel like it BELONGS in the current story - seamless integration
+5. Consider where this will be placed and how it connects to surrounding content
+3. **CRITICAL TEMPORAL CONTEXT**: Since the context article was published ${dateContext}, you MUST use temporal markers to show this is historical/background information:
+   - Use phrases like: "has previously discussed", "in past interviews", "historically noted", "in earlier statements"
+   - If quoting or referencing past events, use past tense: "said", "called", "described", "labeled"
+   - Make it clear this is background context, not current news happening simultaneously
+   - Connect past context to current developments: "This historical perspective explains...", "This past decision may inform..."
+4. Keep the paragraph to EXACTLY 2 sentences - no more, no less
+4. **CRITICAL HYPERLINK INSTRUCTION**: 
+   - You MUST replace the text "REPLACE_WITH_REAL_PHRASE" in this format: <a href="${article.url}">REPLACE_WITH_REAL_PHRASE</a>
+   - "REPLACE_WITH_REAL_PHRASE" is a PLACEHOLDER - you must replace it with an actual 3-4 word phrase from YOUR sentence
+   - Examples of good hyperlink phrases: "11.5% stock decline", "unexpected CEO announcement", "downgraded their rating", "Greg Abel succession"
+   - The phrase you hyperlink should be words that ACTUALLY APPEAR in your sentence, not placeholder text
+5. FORBIDDEN PHRASES - Do NOT use any of these:
+   - "in an earlier article" / "a recent article" / "according to reports"
+   - "as detailed in" / "as outlined in" / "as mentioned in"
+   - "publicly acknowledged" / "has discussed" / "has reflected on" (without specifics)
+   - "teaching moments" / "adds depth" / "illustrating an approach"
+   - Any phrase that ends with the same words/concept that started the sentence
+9. **ABSOLUTELY CRITICAL - HYPERLINK CREATION**:
+   - DO NOT write "actual three word phrase" or "REPLACE_WITH_REAL_PHRASE" or "three word phrase" in your output
+   - These are PLACEHOLDERS that you must REPLACE with real words from your sentence
+   - Example: If you write "Berkshire's B shares declined 11.5% after the unexpected CEO announcement in May"
+   - You could hyperlink: <a href="url">unexpected CEO announcement</a> or <a href="url">declined 11.5% after</a>
+   - The hyperlinked words MUST be actual words from your sentence, not placeholder text
+10. CRITICAL: Format the output with proper HTML paragraph tags. The paragraph should be wrapped in <p> tags.
+11. BANNED GENERIC STATEMENTS - Do NOT write:
+   - "publicly acknowledged many missteps" (too vague - name a SPECIFIC misstep)
+   - "has reflected on challenges" (too vague - give SPECIFIC challenge)
+   - "maintains a cautious strategy" (too vague - give SPECIFIC action)
+   - "teaching moments for others" (too vague - give SPECIFIC lesson/example)
+   - "might create advantageous entry points" (too vague - use SPECIFIC numbers/facts)
+   - "aligns with earlier observations" (too vague - what specific earlier observation?)
+   - "influencing his decision-making amidst trends" (too vague and wordy)
+12. CRITICAL - DO NOT FABRICATE QUOTES OR STATEMENTS:
+   - Do NOT say "Buffett has noted" or "Buffett said" unless the article has a DIRECT QUOTE
+   - If the article is analyzing markets/stocks, frame it as analysis, not as Buffett's statements
+   - Example: If article says "Death Cross appeared", don't write "Buffett noted that Death Cross appeared"
+   - Only attribute statements to people when they are DIRECTLY quoted in the article
+13. MANDATORY EXTRACTION: Before writing, identify and extract from the article:
+   - What SPECIFIC investment/company is mentioned?
+   - What SPECIFIC number/amount/percentage is mentioned?
+   - What SPECIFIC person is quoted and what did they say?
+   - What SPECIFIC action or event occurred?
+   Then use these specifics in your paragraph.
+14. CRITICAL - NO WORD DUPLICATION: Do NOT repeat the same key phrases, terms, or concepts within the paragraph. Each sentence must introduce NEW information.
+15. Use AP style and maintain a professional tone
+16. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
     * CRITICAL: You MUST follow the name usage patterns established in the current article above
     * If the current article uses only last names (e.g., "Johnson", "Trump", "Bowser"), use ONLY last names in context
     * If the current article uses full names, use full names in context
@@ -90,7 +194,7 @@ Requirements:
     * Examples: If the main article says "Johnson" and "Trump", then in context say "Johnson" and "Trump", NOT "Brandon Johnson" and "Donald Trump"
     * Examples: If the main article says "Brandon Johnson" and "Donald Trump", then in context say "Brandon Johnson" and "Donald Trump"
     * The goal is to maintain perfect consistency with how names are already referenced in the main article
-18. TEMPORAL CONTEXT RULES: When the context article is from a different time period than the current story:
+17. TEMPORAL CONTEXT RULES: When the context article is from a different time period than the current story:
     * ALWAYS explicitly mention the time difference (e.g., "June announcement", "earlier this year", "last month")
     * Explain the logical connection between the historical event and current developments
     * Use specific temporal phrases like "comes after", "follows", "builds on", "may have contributed to", "could impact", "reflects ongoing challenges from"
@@ -100,48 +204,91 @@ Requirements:
     * Explain causality: "This earlier development may have intensified competitive pressures"
     * Connect the dots: Show how the historical event led to or influenced the current situation
 
-Example format:
-<p>First paragraph with hyperlink <a href="url">executive order signed</a> and second sentence.</p>
-<p>Second paragraph with no hyperlinks and second sentence.</p>
+GOOD EXAMPLES (SPECIFIC FACTS, PROPER HYPERLINKS, CLEAR INTEGRATION):
 
-EXAMPLES OF GOOD TEMPORAL CONTEXT:
-- "Spirit Airlines' August bankruptcy filing follows Southwest Airlines' <a href="url">June trans-Pacific partnership</a> announcement, which may have intensified competitive pressures in the discount airline sector."
-- "This development comes after Southwest's <a href="url">strategic expansion earlier</a> this year, suggesting that Spirit's struggles reflect broader industry challenges."
-- "The timing of Spirit's bankruptcy filing, occurring months after Southwest's <a href="url">partnership announcement</a>, indicates how strategic alliances are reshaping the competitive landscape."
+**Example 1 - Technical Analysis:**
+"A <a href="url">Death Cross pattern</a> appeared on Berkshire's chart in late October, marking the first such occurrence since August when the same signal preceded the stock's exact bottom before a 7.2% rally. The B shares have gained just 6% over the past year, significantly trailing the S&P 500's 19% surge, with the widest underperformance gap of the year."
+
+**Example 2 - Historical Decision:**
+"In past shareholder letters, Buffett described the original purchase of <a href="url">Berkshire Hathaway itself</a> as his 'dumbest' investment, estimating it cost him $200 billion in potential value over time. This admission came decades after the 1965 textile company acquisition, which Buffett later acknowledged was driven by spite rather than sound business judgment."
+
+**Example 3 - Recent Performance:**
+"Berkshire's shares dropped nearly 15% to $459 in August following Buffett's May announcement that he would <a href="url">step down as CEO</a> at year-end, though they have since climbed 7.2% as some investors bet the worst is over. Analyst downgrades from firms like Keefe, Bruyette & Woods cited 'historically unique succession risk' as the primary concern."
+
+**Why These Work:**
+- ✓ Multiple specific numbers (6%, 19%, 7.2%, 15%, $459)
+- ✓ Specific dates/timeframes (October, August, May, 1965)
+- ✓ Specific events (Death Cross appeared, shares dropped, announced step down)
+- ✓ Real hyperlinks on actual phrases from the sentence
+- ✓ Facts connect to current story without repeating current article facts
+
+BAD EXAMPLES (DO NOT WRITE LIKE THIS):
+
+❌ "Historically, the Death Cross pattern appearing on Berkshire Hathaway's chart has raised concerns among investors, yet it previously signaled potential recovery opportunities."
+**Why Bad:** 
+- No specific numbers (which %? when exactly?)
+- No hyperlink visible
+- "raised concerns" and "recovery opportunities" are vague
+- No specific dates or timeframes
+
+❌ "Buffett's decision to maintain a cautious approach comes after earlier reports indicated a $13.485 billion operating profit."
+**Why Bad:**
+- References facts from CURRENT article, not context article
+- No hyperlink
+- Confuses reader about what's historical vs current
+
+❌ "This perspective aligns with earlier observations that market fluctuations might create entry points."
+**Why Bad:**
+- Completely vague - no specific facts
+- "might create" is wishy-washy
+- No numbers, dates, or events
+
+❌ "This is highlighted in the <a href="url">actual three word phrase</a> regarding the company's strategy."
+**Why Bad:**
+- Used placeholder text instead of real phrase
+- Too vague about what "this" refers to
 
 EXAMPLES OF GOOD THREE-WORD PHRASES TO HYPERLINK:
-- "executive order signed"
-- "federal immigration raids" 
-- "Democratic leaders resisting"
-- "trans-Pacific partnership"
-- "strategic expansion earlier"
-- "partnership announcement"
-- "bankruptcy filing follows"
-- "competitive pressures intensified"
+- "Dexter Shoe Company"
+- "Walmart stock early"
+- "missed opportunity cost"
+- "shareholder letter noted"
+- "investment mistakes detailed"
 
-EXAMPLES OF GOOD SPECIFIC DETAILS TO INCLUDE:
-- If the article mentions "41 million viewers watched", include that specific number
-- If the article quotes someone saying "I'm a huge fan", include that quote
-- If the article mentions "stayed up until after midnight", include that specific detail
-- If the article mentions specific events like "Canelo Alvarez vs Terence Crawford", include those names
-- If the article mentions "six or seven fights attended", include that specific number
+**FINAL CHECKLIST BEFORE YOU WRITE:**
+✓ Have you identified 2-3 specific facts from the article (numbers, names, dates, quotes)?
+✓ Will your paragraph include these specific facts?
+✓ Have you included temporal markers (has previously, in past interviews, historically)?
+✓ Is it clear this is BACKGROUND context, not current simultaneous news?
+✓ Have you chosen actual words from your sentence to hyperlink (NOT placeholder text)?
+✓ Does your hyperlink phrase actually appear in your sentence?
+✓ Is it exactly 2 sentences?
 
-EXAMPLES OF BAD GENERIC CONTENT TO AVOID:
-- "This follows Buffett's investment strategy" (too generic)
-- "This aligns with company goals" (too generic)
-- "The move comes amid competitive pressures" (too generic)
-- "This underscores his commitment" (too generic)
+**CRITICAL REMINDERS:** 
+- DO NOT use "actual three word phrase" or "three word phrase" or "REPLACE_WITH_REAL_PHRASE" in your output
+- These are PLACEHOLDERS - replace them with real words from your sentence
+- The hyperlink must be on actual words that appear in your paragraph
+- Use temporal markers so readers know this is historical context, not current news
 
-Write the context paragraphs now:`;
+Write the context paragraph now (ONLY 1 PARAGRAPH with 2 sentences):`;
 
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: prompt }],
-          max_tokens: 300,
-          temperature: 0.7,
+          max_tokens: 1500,
+          temperature: 0.8,
         });
 
         const contextText = completion.choices[0].message?.content?.trim() || '';
+        
+        // Log token usage for this context generation
+        if (completion.usage) {
+          console.log(`\n📊 TOKEN USAGE for context article ${i + 1}/${selectedArticles.length}:`);
+          console.log(`   - Prompt tokens: ${completion.usage.prompt_tokens}`);
+          console.log(`   - Completion tokens: ${completion.usage.completion_tokens}`);
+          console.log(`   - Total tokens: ${completion.usage.total_tokens}`);
+          console.log(`   - Model: gpt-4o-mini\n`);
+        }
         
         if (contextText) {
           console.log(`Generated context for "${article.headline}":`, contextText.substring(0, 200) + '...');
@@ -156,8 +303,12 @@ Write the context paragraphs now:`;
           
           // Validate that hyperlink was generated
           if (!formattedContext.includes(`<a href="${article.url}">`)) {
-            console.warn(`Warning: No hyperlink found in context for article "${article.headline}". URL: ${article.url}`);
-            console.log('Generated context text:', formattedContext);
+            console.error(`CRITICAL ERROR: No hyperlink found in context for article "${article.headline}"`);
+            console.error(`Expected URL: ${article.url}`);
+            console.error('Generated context text:', formattedContext);
+            // Skip this context if no hyperlink - it's invalid
+            console.error('Skipping this context article due to missing hyperlink');
+            continue;
           }
           
           // Add this context to the working article immediately
@@ -197,10 +348,14 @@ Write the context paragraphs now:`;
   }
 }
 
-// Function to add context to an article
+// Function to add context to an article using hybrid insertion approach
 async function addContextToArticle(article: string, contextText: string, isFirstArticle: boolean): Promise<string> {
   // For the first article, we need to generate a subhead and insert the context properly
   if (isFirstArticle) {
+    // Find the optimal insertion point using hybrid approach
+    const insertionResult = findOptimalInsertionPoint(article);
+    const { insertionIndex, beforeContext, afterContext } = insertionResult;
+    
     // Generate a subhead for the context section
     let contextSubhead = '';
     try {
@@ -252,62 +407,127 @@ Create 1 subhead for the context section:`;
     // Create the full context section with subhead
     const fullContextSection = contextSubhead ? `${contextSubhead}\n\n\n${contextText}` : contextText;
     
-    // Split the article into lines to find the price action section
-    const lines = article.split('\n');
-    const priceActionIndex = lines.findIndex((line: string) => 
-      line.includes('Price Action:') || 
-      line.includes('<strong>') && line.includes('Price Action:') ||
-      line.includes('Price Action')
-    );
+    // Split article into paragraphs
+    const paragraphs = article.split(/\n\n+/);
     
-    if (priceActionIndex !== -1) {
-      // Insert context before the price action line
-      const beforePriceAction = lines.slice(0, priceActionIndex).join('\n');
-      const priceActionAndAfter = lines.slice(priceActionIndex).join('\n');
-      
-      // Check if there's a "Read Next" section before price action that needs to be moved
-      const readNextPattern = /Read Next:[\s\S]*?(?=\n\n|$)/;
-      const readNextMatch = beforePriceAction.match(readNextPattern);
-      
-      if (readNextMatch) {
-        // Remove the "Read Next" section from before price action
-        const beforePriceActionWithoutReadNext = beforePriceAction.replace(readNextPattern, '').trim();
-        // Insert context first, then "Read Next" after context
-        return `${beforePriceActionWithoutReadNext}\n\n${fullContextSection}\n\n${readNextMatch[0]}\n\n${priceActionAndAfter}`;
-      } else {
-        // No "Read Next" section to move, just insert context
-        return `${beforePriceAction}\n\n${fullContextSection}\n\n${priceActionAndAfter}`;
-      }
-    } else {
-      // If no price action found, check if there's a "Read Next" section at the end to move
-      const readNextPattern = /Read Next:[\s\S]*?(?=\n\n|$)/;
-      const readNextMatch = article.match(readNextPattern);
-      
-      if (readNextMatch) {
-        // Remove the "Read Next" section from the end
-        const articleWithoutReadNext = article.replace(readNextPattern, '').trim();
-        // Insert context first, then "Read Next" after context
-        return `${articleWithoutReadNext}\n\n${fullContextSection}\n\n${readNextMatch[0]}`;
-      } else {
-        // No "Read Next" section to move, just add context to the end
-        return `${article}\n\n${fullContextSection}`;
-      }
-    }
+    // Insert the context at the calculated position
+    paragraphs.splice(insertionIndex, 0, fullContextSection);
+    
+    return paragraphs.join('\n\n');
   } else {
-    // For subsequent articles, we need to insert them BEFORE the "Read Next" section
-    const readNextPattern = /Read Next:[\s\S]*?(?=\n\n|$)/;
-    const readNextMatch = article.match(readNextPattern);
+    // For subsequent articles, space them out through the article (not back-to-back)
+    // CRITICAL: Do NOT insert at the very end - distribute evenly through middle sections
+    const paragraphs = article.split(/\n\n+/);
     
-    if (readNextMatch) {
-      // Remove the "Read Next" section from the end
-      const articleWithoutReadNext = article.replace(readNextPattern, '').trim();
-      // Insert context first, then "Read Next" after context
-      return `${articleWithoutReadNext}\n\n${contextText}\n\n${readNextMatch[0]}`;
-    } else {
-      // No "Read Next" section to move, just add context to the end
-      return `${article}\n\n${contextText}`;
+    // Find the "Read Next" or "Price Action" section
+    const readNextIndex = paragraphs.findIndex(p => p.includes('Read Next:'));
+    const priceActionIndex = paragraphs.findIndex(p => p.includes('Price Action:'));
+    
+    // Determine the content end (before Read Next/Price Action)
+    let contentEndIndex = paragraphs.length;
+    if (priceActionIndex !== -1) {
+      contentEndIndex = priceActionIndex;
+    } else if (readNextIndex !== -1) {
+      contentEndIndex = readNextIndex;
     }
+    
+    // Find all existing context locations to avoid clustering
+    const existingContextIndices = [];
+    for (let i = 0; i < contentEndIndex; i++) {
+      const para = paragraphs[i];
+      // Look for context indicators: subheadings or paragraphs with hyperlinks discussing past events
+      if ((para.length < 100 && para.length > 10 && !para.includes('<') && !para.includes('Read')) ||
+          (para.includes('<a href=') && (para.includes('previously') || para.includes('has called') || para.includes('past')))) {
+        existingContextIndices.push(i);
+      }
+    }
+    
+    // Space out subsequent context articles progressively through the article
+    // First context at ~45%, second at ~65%, third at ~75%, etc. - but never at the end
+    const contextCount = existingContextIndices.length > 0 ? existingContextIndices.length + 1 : 1;
+    let targetPosition;
+    
+    if (contextCount === 2) {
+      // Second context article: place at 65-70% through content
+      targetPosition = Math.floor(contentEndIndex * 0.67);
+    } else if (contextCount === 3) {
+      // Third context article: place at 75-80% through content
+      targetPosition = Math.floor(contentEndIndex * 0.77);
+    } else {
+      // Additional contexts: space further out
+      targetPosition = Math.floor(contentEndIndex * (0.45 + (contextCount * 0.12)));
+    }
+    
+    // Ensure we don't go too close to the end (leave at least 2 paragraphs)
+    const maxPosition = Math.max(contentEndIndex - 2, 3);
+    const insertionIndex = Math.min(targetPosition, maxPosition);
+    
+    // Also ensure we're not too close to existing context (at least 3 paragraphs away)
+    let adjustedIndex = insertionIndex;
+    for (const existingIndex of existingContextIndices) {
+      if (Math.abs(adjustedIndex - existingIndex) < 3) {
+        // Move it at least 3 paragraphs away
+        adjustedIndex = existingIndex + 4;
+        // But don't exceed max position
+        if (adjustedIndex > maxPosition) {
+          adjustedIndex = Math.max(existingIndex - 4, 3);
+        }
+      }
+    }
+    
+    console.log(`Inserting context article #${contextCount} at paragraph ${adjustedIndex}, leaving ${contentEndIndex - adjustedIndex} paragraphs after to frame the story`);
+    
+    // Insert the additional context
+    paragraphs.splice(adjustedIndex, 0, contextText);
+    
+    return paragraphs.join('\n\n');
   }
+}
+
+// Function to find optimal insertion point using hybrid approach
+function findOptimalInsertionPoint(article: string): { 
+  insertionIndex: number; 
+  beforeContext: string; 
+  afterContext: string; 
+} {
+  // Split article into paragraphs
+  const paragraphs = article.split(/\n\n+/).filter(p => p.trim().length > 0);
+  
+  // Find special sections that should come after context
+  const priceActionIndex = paragraphs.findIndex(p => 
+    p.includes('Price Action:') || 
+    p.includes('Price Action')
+  );
+  const readNextIndex = paragraphs.findIndex(p => p.includes('Read Next:'));
+  
+  // Determine the content paragraphs (exclude Price Action and Read Next)
+  let contentEndIndex = paragraphs.length;
+  if (priceActionIndex !== -1) {
+    contentEndIndex = priceActionIndex;
+  } else if (readNextIndex !== -1) {
+    contentEndIndex = readNextIndex;
+  }
+  
+  // Calculate insertion point: 50-60% through content paragraphs, but at least after paragraph 3
+  // CRITICAL: Never insert at the very end - leave at least 2 paragraphs after context to frame the story
+  const minParagraphs = Math.min(3, contentEndIndex - 3);
+  const idealPosition = Math.floor(contentEndIndex * 0.55); // 55% through content
+  const maxPosition = Math.max(contentEndIndex - 2, minParagraphs + 1); // Leave at least 2 paragraphs at end
+  const insertionIndex = Math.max(minParagraphs, Math.min(idealPosition, maxPosition));
+  
+  // Extract context before and after insertion point (for potential future use)
+  const beforeContext = paragraphs.slice(Math.max(0, insertionIndex - 2), insertionIndex).join('\n\n');
+  const afterContext = paragraphs.slice(insertionIndex, Math.min(insertionIndex + 2, contentEndIndex)).join('\n\n');
+  
+  console.log(`Article has ${paragraphs.length} total paragraphs, ${contentEndIndex} content paragraphs`);
+  console.log(`Inserting context at paragraph ${insertionIndex} (${Math.round(insertionIndex/contentEndIndex*100)}% through content)`);
+  console.log(`Leaving ${contentEndIndex - insertionIndex} paragraphs after context to frame the story`);
+  
+  return {
+    insertionIndex,
+    beforeContext,
+    afterContext
+  };
 }
 
 // Function to analyze name patterns in the current article

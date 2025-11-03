@@ -216,52 +216,220 @@ export async function POST(request: Request) {
 
     // Generate condensed context using OpenAI
     const prompt = `
-You are a financial journalist. Given the current article and a recent news article about the same ticker, create 2 very concise paragraphs that add relevant context to the current article.
+You are a financial journalist. Given the current article and a recent news article about the same ticker, create 1 very concise paragraph that adds relevant context to the current article.
 
-Current Article:
+Current Article (FULL TEXT - analyze completely):
 ${currentArticle}
 
-Context News Article:
+Context News Article (FULL TEXT - analyze completely):
 Headline: ${contextArticle.headline}
 Content: ${contextArticle.body}
 
-CRITICAL REQUIREMENTS:
-1. Create exactly 2 paragraphs that provide additional context
-2. Make the content relevant to the current article's topic
-3. Keep each paragraph to EXACTLY 2 sentences maximum - no more, no less
-4. **MANDATORY HYPERLINK RULE**: You MUST include exactly one hyperlink ONLY in the FIRST paragraph using this EXACT format: <a href="${contextArticle.url}">three word phrase</a>
-5. The SECOND paragraph should have NO hyperlinks
-6. Make the content flow naturally with the current article
-7. Focus on providing valuable context that enhances the reader's understanding
-8. Use AP style and maintain a professional tone
-9. Keep paragraphs short and impactful - aim for 1-2 sentences each
-10. The hyperlink should be embedded within existing words in the text, not as "[source]" at the end
-11. Choose relevant three-word phrases within the sentences to hyperlink, such as company names, key terms, or action phrases
-12. **CRITICAL**: ONLY the first paragraph should contain exactly one hyperlink in the format specified above
-13. Do NOT reference "a recent article" or similar phrases - just embed the hyperlink naturally in the existing sentence structure
-14. **CRITICAL**: Format the output with proper HTML paragraph tags. Each paragraph should be wrapped in <p> tags.
-15. **CRITICAL**: Ensure no paragraph has more than 2 sentences - break longer paragraphs into smaller ones
-16. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
+**CRITICAL STEP 1: ANALYZE BOTH ARTICLES FOR INTEGRATION**
+
+A. READ THE FULL CURRENT ARTICLE:
+   - What is the main topic/theme?
+   - What sections/themes are discussed?
+   - What tone and style is used?
+   - Where are there natural topic transitions?
+   - What information would benefit from additional context?
+
+B. READ THE FULL CONTEXT NEWS ARTICLE:
+   - What is the main point of this article?
+   - What specific facts, numbers, and events does it contain?
+   - How does this relate to the current article's themes?
+   - What unique information does it add?
+
+C. IDENTIFY THEMATIC CONNECTION:
+   - Where in the current article does this context fit best thematically?
+   - Which section would benefit most from this background?
+   - How can this context enhance reader understanding?
+
+**STEP 2: EXTRACT SPECIFIC FACTS FROM THE CONTEXT NEWS ARTICLE**
+
+You MUST extract SPECIFIC, CONCRETE facts from the Context News Article:
+
+**A. NUMBERS & PERCENTAGES (Write down EXACT figures):**
+   - Stock performance: ___% gain/loss
+   - Comparison metrics: vs S&P 500's ___% 
+   - Dollar amounts: $___ billion/million
+   - Price levels: declined to $___, climbed ___% 
+   - Time periods: over past ___ months/year
+
+**B. DATES & TIMEFRAMES (Be specific):**
+   - When did events occur? (Month/Year)
+   - How long ago? (e.g., "in August", "since May")
+   - Time comparisons: "first since ___"
+
+**C. SPECIFIC EVENTS & ACTIONS:**
+   - What technical pattern appeared? (Death Cross, Golden Cross, etc.)
+   - What did someone DO? (announced, stepped down, purchased, sold)
+   - What changed? (rating downgraded, shares declined, cash increased)
+
+**D. PEOPLE & QUOTES:**
+   - Who is named? What is their role/title?
+   - What did they ACTUALLY SAY? (Only direct quotes in quotation marks)
+
+**E. ARTICLE TYPE:**
+   - Is this current news or historical analysis?
+   - Is this about past events or ongoing situations?
+
+**CRITICAL RULES:**
+- DO NOT reference facts from the Current Article above - ONLY use facts from the Context News Article
+- DO NOT make up numbers - use EXACT figures from the article
+- DO NOT say "Buffett noted/said" unless there's a direct quote
+- DO NOT write generic statements - extract SPECIFIC details
+
+**STEP 3: VERIFY YOUR EXTRACTION**
+Before writing, confirm you have extracted:
+- ✓ At least 3 specific numbers/percentages
+- ✓ At least 2 specific dates/timeframes  
+- ✓ At least 1 specific event or action
+- ✓ The main subject/topic of the article
+- ✓ How this context relates to the current article
+
+If you haven't extracted these, GO BACK and re-read the Context News Article.
+
+**STEP 4: CRAFT SEAMLESS INTEGRATION**
+
+Now that you understand BOTH articles completely:
+
+1. **Write Context That Bridges**: Your paragraph should feel like a natural extension of the current article's narrative
+2. **Use Transitional Flow**: Consider what topics come before and after in the current article
+3. **Add Value**: Provide background that enhances the current story without repeating it
+4. **Maintain Tone**: Match the style and tone of the current article
+
+**STEP 5: WRITE YOUR PARAGRAPH**
+Requirements:
+1. Create EXACTLY 1 paragraph (2 sentences) using SPECIFIC FACTS from the Context News article
+2. MANDATORY: Include at least 3-4 specific details (numbers, dates, events) from the Context News article
+3. DO NOT reference facts from the Current Article - ONLY use facts from the Context News Article
+4. Make it feel like it BELONGS in the current story - seamless integration
+5. Consider where this will be placed and how it connects to surrounding content
+3. **CRITICAL TEMPORAL CONTEXT**: The context article may be from a different time period than the current article. You MUST use temporal markers to show this is historical/background information:
+   - Use phrases like: "has previously discussed", "in past interviews", "historically noted", "in earlier statements"
+   - If quoting or referencing past events, use past tense: "said", "called", "described", "labeled"
+   - Make it clear this is background context, not current news happening simultaneously
+   - Connect past context to current developments: "This historical perspective may inform...", "This past decision reflects..."
+4. Keep the paragraph to EXACTLY 2 sentences - no more, no less
+4. **CRITICAL HYPERLINK INSTRUCTION**: 
+   - You MUST replace the text "REPLACE_WITH_REAL_PHRASE" in this format: <a href="${contextArticle.url}">REPLACE_WITH_REAL_PHRASE</a>
+   - "REPLACE_WITH_REAL_PHRASE" is a PLACEHOLDER - you must replace it with an actual 3-4 word phrase from YOUR sentence
+   - Examples of good hyperlink phrases: "11.5% stock decline", "unexpected CEO announcement", "downgraded their rating", "Greg Abel succession"
+   - The phrase you hyperlink should be words that ACTUALLY APPEAR in your sentence, not placeholder text
+5. **FORBIDDEN PHRASES** - Do NOT use any of these:
+   - "in an earlier article" / "a recent article" / "according to reports"
+   - "as detailed in" / "as outlined in" / "as mentioned in"
+   - "publicly acknowledged" / "has discussed" / "has reflected on" (without specifics)
+   - "teaching moments" / "adds depth" / "illustrating an approach"
+   - Any phrase that ends with the same words/concept that started the sentence
+6. **ABSOLUTELY CRITICAL - HYPERLINK CREATION**:
+   - DO NOT write "actual three word phrase" or "REPLACE_WITH_REAL_PHRASE" or "three word phrase" in your output
+   - These are PLACEHOLDERS that you must REPLACE with real words from your sentence
+   - Example: If you write "Berkshire's B shares declined 11.5% after the unexpected CEO announcement in May"
+   - You could hyperlink: <a href="url">unexpected CEO announcement</a> or <a href="url">declined 11.5% after</a>
+   - The hyperlinked words MUST be actual words from your sentence, not placeholder text
+7. **CRITICAL**: Format the output with proper HTML paragraph tags. The paragraph should be wrapped in <p> tags.
+8. **BANNED GENERIC STATEMENTS** - Do NOT write:
+   - "publicly acknowledged many missteps" (too vague - name a SPECIFIC misstep)
+   - "has reflected on challenges" (too vague - give SPECIFIC challenge)
+   - "maintains a cautious strategy" (too vague - give SPECIFIC action)
+   - "teaching moments for others" (too vague - give SPECIFIC lesson/example)
+   - "might create advantageous entry points" (too vague - use SPECIFIC numbers/facts)
+   - "aligns with earlier observations" (too vague - what specific earlier observation?)
+   - "influencing his decision-making amidst trends" (too vague and wordy)
+9. **CRITICAL - DO NOT FABRICATE QUOTES OR STATEMENTS**:
+   - Do NOT say "Buffett has noted" or "Buffett said" unless the article has a DIRECT QUOTE
+   - If the article is analyzing markets/stocks, frame it as analysis, not as Buffett's statements
+   - Example: If article says "Death Cross appeared", don't write "Buffett noted that Death Cross appeared"
+   - Only attribute statements to people when they are DIRECTLY quoted in the article
+11. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
     * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "<strong>Bill Ackman</strong>" or "<strong>Warren Buffett</strong>")
     * Second and subsequent references: Use only the last name without bolding (e.g., "Ackman" or "Buffett")
-    * This applies to all people mentioned in the context paragraphs
+    * This applies to all people mentioned in the context paragraph
+12. **CRITICAL - NO WORD DUPLICATION**: Do NOT repeat the same key phrases, terms, or concepts within the paragraph. Each sentence must introduce NEW information.
+13. Use AP style and maintain a professional tone
 
-**MANDATORY EXAMPLE FORMAT:**
-<p>First paragraph with hyperlink <a href="${contextArticle.url}">three word phrase</a> and second sentence.</p>
-<p>Second paragraph with no hyperlinks and second sentence.</p>
+**GOOD EXAMPLES (SPECIFIC FACTS, PROPER HYPERLINKS, CLEAR INTEGRATION):**
 
-**CRITICAL**: You MUST include the hyperlink in the first paragraph. Do not skip this requirement.
+**Example 1 - Technical Analysis:**
+"A <a href="url">Death Cross pattern</a> appeared on Berkshire's chart in late October, marking the first such occurrence since August when the same signal preceded the stock's exact bottom before a 7.2% rally. The B shares have gained just 6% over the past year, significantly trailing the S&P 500's 19% surge, with the widest underperformance gap of the year."
 
-Write the 2 context paragraphs now:`;
+**Example 2 - Historical Decision:**
+"In past shareholder letters, Buffett described the original purchase of <a href="url">Berkshire Hathaway itself</a> as his 'dumbest' investment, estimating it cost him $200 billion in potential value over time. This admission came decades after the 1965 textile company acquisition, which Buffett later acknowledged was driven by spite rather than sound business judgment."
+
+**Example 3 - Recent Performance:**
+"Berkshire's shares dropped nearly 15% to $459 in August following Buffett's May announcement that he would <a href="url">step down as CEO</a> at year-end, though they have since climbed 7.2% as some investors bet the worst is over. Analyst downgrades from firms like Keefe, Bruyette & Woods cited 'historically unique succession risk' as the primary concern."
+
+**Why These Work:**
+- ✓ Multiple specific numbers (6%, 19%, 7.2%, 15%, $459)
+- ✓ Specific dates/timeframes (October, August, May, 1965)
+- ✓ Specific events (Death Cross appeared, shares dropped, announced step down)
+- ✓ Real hyperlinks on actual phrases from the sentence
+- ✓ Facts connect to current story without repeating current article facts
+
+**BAD EXAMPLES (DO NOT WRITE LIKE THIS):**
+
+❌ "Historically, the Death Cross pattern appearing on Berkshire Hathaway's chart has raised concerns among investors, yet it previously signaled potential recovery opportunities."
+**Why Bad:** 
+- No specific numbers (which %? when exactly?)
+- No hyperlink visible
+- "raised concerns" and "recovery opportunities" are vague
+- No specific dates or timeframes
+
+❌ "Buffett's decision to maintain a cautious approach comes after earlier reports indicated a $13.485 billion operating profit."
+**Why Bad:**
+- References facts from CURRENT article, not context article
+- No hyperlink
+- Confuses reader about what's historical vs current
+
+❌ "This perspective aligns with earlier observations that market fluctuations might create entry points."
+**Why Bad:**
+- Completely vague - no specific facts
+- "might create" is wishy-washy
+- No numbers, dates, or events
+
+❌ "This is highlighted in the <a href="url">actual three word phrase</a> regarding the company's strategy."
+**Why Bad:**
+- Used placeholder text instead of real phrase
+- Too vague about what "this" refers to
+
+**FINAL CHECKLIST BEFORE YOU WRITE:**
+✓ Have you identified 2-3 specific facts from the article (numbers, names, dates, quotes)?
+✓ Will your paragraph include these specific facts?
+✓ Have you included temporal markers (has previously, in past interviews, historically)?
+✓ Is it clear this is BACKGROUND context, not current simultaneous news?
+✓ Have you chosen actual words from your sentence to hyperlink (NOT placeholder text)?
+✓ Does your hyperlink phrase actually appear in your sentence?
+✓ Is it exactly 2 sentences?
+
+**CRITICAL REMINDERS:** 
+- DO NOT use "actual three word phrase" or "three word phrase" or "REPLACE_WITH_REAL_PHRASE" in your output
+- These are PLACEHOLDERS - replace them with real words from your sentence
+- The hyperlink must be on actual words that appear in your paragraph
+- Use temporal markers so readers know this is historical context, not current news
+
+**CRITICAL**: You MUST include the hyperlink. Do not skip this requirement.
+
+Write the 1 context paragraph now (ONLY 1 PARAGRAPH with 2 sentences):`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 300,
-      temperature: 0.7,
+      max_tokens: 1500,
+      temperature: 0.8,
     });
 
     const contextParagraphs = completion.choices[0].message?.content?.trim() || '';
+
+    // Log token usage for this context generation
+    if (completion.usage) {
+      console.log(`\n📊 TOKEN USAGE for context generation:`);
+      console.log(`   - Prompt tokens: ${completion.usage.prompt_tokens}`);
+      console.log(`   - Completion tokens: ${completion.usage.completion_tokens}`);
+      console.log(`   - Total tokens: ${completion.usage.total_tokens}`);
+      console.log(`   - Model: gpt-4o-mini\n`);
+    }
 
     // Debug: Log the generated context to see if hyperlinks are included
     console.log('Generated context paragraphs:', contextParagraphs);
@@ -327,52 +495,9 @@ Create 1 subhead for the context section:`;
       console.error('Error generating context subhead:', error);
     }
 
-    // Insert context and subhead together
-    let updatedArticleWithSubheads = currentArticle;
-    // Split the article into lines to find the price action section
-    const lines = currentArticle.split('\n');
-    const priceActionIndex = lines.findIndex((line: string) => 
-      line.includes('Price Action:') || 
-      line.includes('<strong>') && line.includes('Price Action:') ||
-      line.includes('Price Action')
-    );
-    
-    if (priceActionIndex !== -1) {
-      // Insert context and subhead before the price action line
-      const beforePriceAction = lines.slice(0, priceActionIndex).join('\n');
-      const priceActionAndAfter = lines.slice(priceActionIndex).join('\n');
+    // Insert context and subhead together using hybrid approach
       const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
-      
-      // Check if there's a "Read Next" section before price action that needs to be moved
-      const readNextPattern = /Read Next:[\s\S]*?(?=\n\n|$)/;
-      const readNextMatch = beforePriceAction.match(readNextPattern);
-      
-      if (readNextMatch) {
-        // Remove the "Read Next" section from before price action
-        const beforePriceActionWithoutReadNext = beforePriceAction.replace(readNextPattern, '').trim();
-        // Insert context first, then "Read Next" after context
-        updatedArticleWithSubheads = `${beforePriceActionWithoutReadNext}\n\n${subheadSection}\n\n${readNextMatch[0]}\n\n${priceActionAndAfter}`;
-      } else {
-        // No "Read Next" section to move, just insert context
-        updatedArticleWithSubheads = `${beforePriceAction}\n\n${subheadSection}\n\n${priceActionAndAfter}`;
-      }
-    } else {
-      // If no price action found, check if there's a "Read Next" section at the end to move
-      const readNextPattern = /Read Next:[\s\S]*?(?=\n\n|$)/;
-      const readNextMatch = currentArticle.match(readNextPattern);
-      
-      if (readNextMatch) {
-        // Remove the "Read Next" section from the end
-        const articleWithoutReadNext = currentArticle.replace(readNextPattern, '').trim();
-        const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
-        // Insert context first, then "Read Next" after context
-        updatedArticleWithSubheads = `${articleWithoutReadNext}\n\n${subheadSection}\n\n${readNextMatch[0]}`;
-      } else {
-        // No "Read Next" section to move, just add context to the end
-        const subheadSection = contextSubhead ? `${contextSubhead}\n\n\n${formattedContextParagraphs}` : formattedContextParagraphs;
-        updatedArticleWithSubheads = `${currentArticle}\n\n${subheadSection}`;
-      }
-    }
+    const updatedArticleWithSubheads = insertContextIntoArticle(currentArticle, subheadSection);
     
     return NextResponse.json({ 
       updatedArticle: updatedArticleWithSubheads,
@@ -385,4 +510,41 @@ Create 1 subhead for the context section:`;
     console.error('Error adding context:', error);
     return NextResponse.json({ error: error.message || 'Failed to add context.' }, { status: 500 });
   }
+}
+
+// Function to insert context into article using hybrid approach
+function insertContextIntoArticle(article: string, contextSection: string): string {
+  // Split article into paragraphs
+  const paragraphs = article.split(/\n\n+/).filter(p => p.trim().length > 0);
+  
+  // Find special sections that should come after context
+  const priceActionIndex = paragraphs.findIndex(p => 
+    p.includes('Price Action:') || 
+    p.includes('Price Action')
+  );
+  const readNextIndex = paragraphs.findIndex(p => p.includes('Read Next:'));
+  
+  // Determine the content paragraphs (exclude Price Action and Read Next)
+  let contentEndIndex = paragraphs.length;
+  if (priceActionIndex !== -1) {
+    contentEndIndex = priceActionIndex;
+  } else if (readNextIndex !== -1) {
+    contentEndIndex = readNextIndex;
+  }
+  
+  // Calculate insertion point: 50-60% through content paragraphs, but at least after paragraph 3
+  // CRITICAL: Never insert at the very end - leave at least 2 paragraphs after context to frame the story
+  const minParagraphs = Math.min(3, contentEndIndex - 3);
+  const idealPosition = Math.floor(contentEndIndex * 0.55); // 55% through content
+  const maxPosition = Math.max(contentEndIndex - 2, minParagraphs + 1); // Leave at least 2 paragraphs at end
+  const insertionIndex = Math.max(minParagraphs, Math.min(idealPosition, maxPosition));
+  
+  console.log(`Article has ${paragraphs.length} total paragraphs, ${contentEndIndex} content paragraphs`);
+  console.log(`Inserting context at paragraph ${insertionIndex} (${Math.round(insertionIndex/contentEndIndex*100)}% through content)`);
+  console.log(`Leaving ${contentEndIndex - insertionIndex} paragraphs after context to frame the story`);
+  
+  // Insert the context at the calculated position
+  paragraphs.splice(insertionIndex, 0, contextSection);
+  
+  return paragraphs.join('\n\n');
 }
