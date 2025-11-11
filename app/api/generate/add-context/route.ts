@@ -269,6 +269,10 @@ You MUST extract SPECIFIC, CONCRETE facts from the Context News Article:
 **D. PEOPLE & QUOTES:**
    - Who is named? What is their role/title?
    - What did they ACTUALLY SAY? (Only direct quotes in quotation marks)
+   - CRITICAL: Distinguish between DIRECT QUOTES and PARAPHRASES
+     * DIRECT QUOTE: "I am very confident in Greg," Buffett said. ← Use this with quotation marks
+     * PARAPHRASE: saying it is designed to withstand any economic environment ← DO NOT put in quotes
+     * PARAPHRASE: He noted that the company has durability ← DO NOT put in quotes
 
 **E. ARTICLE TYPE:**
    - Is this current news or historical analysis?
@@ -279,6 +283,14 @@ You MUST extract SPECIFIC, CONCRETE facts from the Context News Article:
 - DO NOT make up numbers - use EXACT figures from the article
 - DO NOT say "Buffett noted/said" unless there's a direct quote
 - DO NOT write generic statements - extract SPECIFIC details
+
+**CRITICAL - QUOTE vs PARAPHRASE DETECTION:**
+- If the source says "saying X" or "noted that X" or "emphasized X" → This is a PARAPHRASE, NOT a quote
+- Only text that appears INSIDE QUOTATION MARKS in the source is a real quote
+- NEVER put paraphrased content inside quotation marks
+- NEVER write: stating that the company is "designed to withstand..." ← This fabricates a quote
+- CORRECT: In his letter, Buffett discussed Berkshire's durability in challenging economic conditions ← Paraphrase without quotes
+- CORRECT: "Berkshire has less chance of a devastating disaster than any business I know," he said ← Real quote from source
 
 **STEP 3: VERIFY YOUR EXTRACTION**
 Before writing, confirm you have extracted:
@@ -339,10 +351,25 @@ Requirements:
    - "aligns with earlier observations" (too vague - what specific earlier observation?)
    - "influencing his decision-making amidst trends" (too vague and wordy)
 9. **CRITICAL - DO NOT FABRICATE QUOTES OR STATEMENTS**:
-   - Do NOT say "Buffett has noted" or "Buffett said" unless the article has a DIRECT QUOTE
+   - Do NOT say "Buffett has noted" or "Buffett said" unless the article has a DIRECT QUOTE in quotation marks
    - If the article is analyzing markets/stocks, frame it as analysis, not as Buffett's statements
    - Example: If article says "Death Cross appeared", don't write "Buffett noted that Death Cross appeared"
    - Only attribute statements to people when they are DIRECTLY quoted in the article
+   
+   **FABRICATED QUOTE EXAMPLES - NEVER DO THIS:**
+   ❌ BAD: According to CNBC, Buffett reassured shareholders of Berkshire's resilience, stating that the company is "designed to withstand nearly any economic environment."
+   Why Bad: The phrase in quotes is a PARAPHRASE from the article, not Buffett's actual words
+   
+   ❌ BAD: Buffett noted the company is "maintaining strong fundamentals"
+   Why Bad: If source says "noting the company's strong fundamentals" that's a paraphrase, NOT a quote
+   
+   ✓ CORRECT: According to CNBC, Buffett reassured shareholders of Berkshire's resilience and ability to weather challenging economic conditions.
+   Why Good: Paraphrases without fabricating a quote
+   
+   ✓ CORRECT: "Berkshire has less chance of a devastating disaster than any business I know," Buffett said in his letter.
+   Why Good: This uses actual quoted words from the source
+   
+   **DETECTION RULE:** If the source article says "saying X" or "noted X" or "emphasized X" without quotation marks around X, then X is a PARAPHRASE. Never put it in quotes.
 11. NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
     * First reference: Use the full name with the entire name in bold using HTML <strong> tags (e.g., "<strong>Bill Ackman</strong>" or "<strong>Warren Buffett</strong>")
     * Second and subsequent references: Use only the last name without bolding (e.g., "Ackman" or "Buffett")
