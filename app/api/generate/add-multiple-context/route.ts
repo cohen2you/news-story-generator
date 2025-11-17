@@ -30,7 +30,19 @@ export async function POST(request: Request) {
       const article = selectedArticles[i];
       
       try {
+        // Validate article has required fields
+        if (!article.url) {
+          console.error(`Article "${article.headline}" is missing URL - skipping`);
+          continue;
+        }
+        
+        if (!article.headline || !article.body) {
+          console.error(`Article is missing headline or body - skipping`);
+          continue;
+        }
+        
         console.log(`Processing context for article ${i + 1}/${selectedArticles.length}: "${article.headline}"`);
+        console.log(`Article URL: ${article.url}`);
         console.log(`Article content preview:`, article.body.substring(0, 200) + '...');
         
         // Get date context for the article
@@ -157,11 +169,15 @@ Requirements:
    - Make it clear this is background context, not current news happening simultaneously
    - Connect past context to current developments: "This historical perspective explains...", "This past decision may inform..."
 4. Keep the paragraph to EXACTLY 2 sentences - no more, no less
-4. **CRITICAL HYPERLINK INSTRUCTION**: 
-   - You MUST replace the text "REPLACE_WITH_REAL_PHRASE" in this format: <a href="${article.url}">REPLACE_WITH_REAL_PHRASE</a>
-   - "REPLACE_WITH_REAL_PHRASE" is a PLACEHOLDER - you must replace it with an actual 3-4 word phrase from YOUR sentence
+4. **CRITICAL HYPERLINK INSTRUCTION - MANDATORY**: 
+   - You MUST include a hyperlink in your paragraph. This is NOT optional.
+   - The hyperlink format MUST be: <a href="${article.url}">YOUR_ACTUAL_PHRASE</a>
+   - Replace "YOUR_ACTUAL_PHRASE" with an actual 3-4 word phrase from YOUR sentence
+   - **CRITICAL**: The hyperlink MUST be embedded WITHIN your sentence text, NOT on its own line or as a separate element
    - Examples of good hyperlink phrases: "11.5% stock decline", "unexpected CEO announcement", "downgraded their rating", "Greg Abel succession"
    - The phrase you hyperlink should be words that ACTUALLY APPEAR in your sentence, not placeholder text
+   - DO NOT skip the hyperlink - your output will be rejected if it doesn't include one
+   - DO NOT put the hyperlink on its own line - it must be part of the sentence flow
 5. FORBIDDEN PHRASES - Do NOT use any of these:
    - "in an earlier article" / "a recent article" / "according to reports"
    - "as detailed in" / "as outlined in" / "as mentioned in"
@@ -297,6 +313,8 @@ EXAMPLES OF GOOD THREE-WORD PHRASES TO HYPERLINK:
 - The hyperlink must be on actual words that appear in your paragraph
 - Use temporal markers so readers know this is historical context, not current news
 
+**CRITICAL**: You MUST include the hyperlink. Do not skip this requirement. The hyperlink format must be: <a href="${article.url}">YOUR_ACTUAL_PHRASE_HERE</a> where YOUR_ACTUAL_PHRASE_HERE is replaced with actual words from your sentence.
+
 Write the context paragraph now (ONLY 1 PARAGRAPH with 2 sentences):`;
 
         const completion = await openai.chat.completions.create({
@@ -321,18 +339,52 @@ Write the context paragraph now (ONLY 1 PARAGRAPH with 2 sentences):`;
           console.log(`Generated context for "${article.headline}":`, contextText.substring(0, 200) + '...');
           
           // Ensure proper HTML paragraph formatting
-          const formattedContext = contextText
+          let formattedContext = contextText
             .replace(/\n\n+/g, '\n\n') // Normalize multiple line breaks to double
             .replace(/\n([^<])/g, '\n\n$1') // Ensure paragraphs are separated by double line breaks
             .replace(/([^>])\n\n([^<])/g, '$1\n\n$2') // Ensure proper spacing around HTML tags
             .replace(/<p>\s*<\/p>/g, '') // Remove empty paragraphs
             .replace(/(<p>.*?<\/p>)\s*(<p>.*?<\/p>)/g, '$1\n\n$2'); // Ensure proper spacing between <p> tags
           
+          // Fix hyperlinks that are on their own line or outside paragraphs
+          // Only process hyperlinks that are NOT already inside a <p> tag
+          // We'll do this by checking if the hyperlink appears between </p> and <p> or at boundaries
+          
+          // Pattern 1: Hyperlink between </p> and <p> tags (definitely outside) - merge into previous paragraph
+          formattedContext = formattedContext.replace(/(<\/p>)\s*\n+\s*(<a href="[^"]+">[^<]+<\/a>)\s*\n+\s*(<p>)/g, (match, p1, link, p3) => {
+            return p1.replace('</p>', ' ' + link + '</p>') + p3;
+          });
+          
+          // Pattern 2: Hyperlink after </p> at end of string - merge into last paragraph
+          formattedContext = formattedContext.replace(/(<\/p>)\s*\n+\s*(<a href="[^"]+">[^<]+<\/a>)\s*$/gm, (match, p1, link) => {
+            return p1.replace('</p>', ' ' + link + '</p>');
+          });
+          
+          // Pattern 3: Hyperlink at start of string before first <p> - wrap in paragraph
+          if (formattedContext.match(/^\s*(<a href="[^"]+">[^<]+<\/a>)/)) {
+            formattedContext = formattedContext.replace(/^\s*(<a href="[^"]+">[^<]+<\/a>)\s*\n+\s*(<p>)/, '<p>$1 ');
+          }
+          
+          // Pattern 4: Standalone hyperlink surrounded by newlines (not inside any tag) - merge with previous paragraph
+          formattedContext = formattedContext.replace(/(<\/p>)\s*\n+\s*(<a href="[^"]+">[^<]+<\/a>)\s*\n+\s*(?!<p>)/g, (match, p1, link) => {
+            return p1.replace('</p>', ' ' + link + '</p>');
+          });
+          
           // Validate that hyperlink was generated
           if (!formattedContext.includes(`<a href="${article.url}">`)) {
             console.error(`CRITICAL ERROR: No hyperlink found in context for article "${article.headline}"`);
             console.error(`Expected URL: ${article.url}`);
+            console.error(`Looking for pattern: <a href="${article.url}">`);
             console.error('Generated context text:', formattedContext);
+            console.error('Context text length:', formattedContext.length);
+            // Check if there's any hyperlink at all
+            const hasAnyHyperlink = formattedContext.includes('<a href=');
+            console.error('Has any hyperlink:', hasAnyHyperlink);
+            if (hasAnyHyperlink) {
+              // Extract any hyperlinks that were generated
+              const hyperlinkMatches = formattedContext.match(/<a href="([^"]+)">/g);
+              console.error('Found hyperlinks:', hyperlinkMatches);
+            }
             // Skip this context if no hyperlink - it's invalid
             console.error('Skipping this context article due to missing hyperlink');
             continue;
