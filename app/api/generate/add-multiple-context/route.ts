@@ -157,27 +157,30 @@ Now that you understand BOTH articles completely:
 4. **Maintain Tone**: Match the style and tone of the current article
 
 **STEP 5: WRITE YOUR PARAGRAPH**
+
+**ABSOLUTE REQUIREMENT #1 - HYPERLINK (MUST BE INCLUDED):**
+- You MUST include a hyperlink in your paragraph. This is NOT optional and your output will be REJECTED without it.
+- The hyperlink format MUST be: <a href="${article.url}">YOUR_ACTUAL_PHRASE</a>
+- Replace "YOUR_ACTUAL_PHRASE" with an actual 3-4 word phrase from YOUR sentence
+- **CRITICAL**: The hyperlink MUST be embedded WITHIN your sentence text, NOT on its own line or as a separate element
+- Examples of good hyperlink phrases: "11.5% stock decline", "unexpected CEO announcement", "downgraded their rating", "Greg Abel succession"
+- The phrase you hyperlink should be words that ACTUALLY APPEAR in your sentence, not placeholder text
+- DO NOT skip the hyperlink - your output will be rejected if it doesn't include one
+- DO NOT put the hyperlink on its own line - it must be part of the sentence flow
+- **VERIFY**: Before submitting, check that your output contains: <a href="${article.url}">
+
 Requirements:
 1. Create EXACTLY 1 paragraph (2 sentences) using SPECIFIC FACTS from the Benzinga article
 2. MANDATORY: Include at least 3-4 specific details (numbers, dates, events) from the Benzinga article
 3. DO NOT reference facts from the Current Article - ONLY use facts from the Selected Benzinga Article
 4. Make it feel like it BELONGS in the current story - seamless integration
 5. Consider where this will be placed and how it connects to surrounding content
-3. **CRITICAL TEMPORAL CONTEXT**: Since the context article was published ${dateContext}, you MUST use temporal markers to show this is historical/background information:
+6. **CRITICAL TEMPORAL CONTEXT**: Since the context article was published ${dateContext}, you MUST use temporal markers to show this is historical/background information:
    - Use phrases like: "has previously discussed", "in past interviews", "historically noted", "in earlier statements"
    - If quoting or referencing past events, use past tense: "said", "called", "described", "labeled"
    - Make it clear this is background context, not current news happening simultaneously
    - Connect past context to current developments: "This historical perspective explains...", "This past decision may inform..."
-4. Keep the paragraph to EXACTLY 2 sentences - no more, no less
-4. **CRITICAL HYPERLINK INSTRUCTION - MANDATORY**: 
-   - You MUST include a hyperlink in your paragraph. This is NOT optional.
-   - The hyperlink format MUST be: <a href="${article.url}">YOUR_ACTUAL_PHRASE</a>
-   - Replace "YOUR_ACTUAL_PHRASE" with an actual 3-4 word phrase from YOUR sentence
-   - **CRITICAL**: The hyperlink MUST be embedded WITHIN your sentence text, NOT on its own line or as a separate element
-   - Examples of good hyperlink phrases: "11.5% stock decline", "unexpected CEO announcement", "downgraded their rating", "Greg Abel succession"
-   - The phrase you hyperlink should be words that ACTUALLY APPEAR in your sentence, not placeholder text
-   - DO NOT skip the hyperlink - your output will be rejected if it doesn't include one
-   - DO NOT put the hyperlink on its own line - it must be part of the sentence flow
+7. Keep the paragraph to EXACTLY 2 sentences - no more, no less
 5. FORBIDDEN PHRASES - Do NOT use any of these:
    - "in an earlier article" / "a recent article" / "according to reports"
    - "as detailed in" / "as outlined in" / "as mentioned in"
@@ -250,13 +253,15 @@ Requirements:
 GOOD EXAMPLES (SPECIFIC FACTS, PROPER HYPERLINKS, CLEAR INTEGRATION):
 
 **Example 1 - Technical Analysis:**
-"A <a href="url">Death Cross pattern</a> appeared on Berkshire's chart in late October, marking the first such occurrence since August when the same signal preceded the stock's exact bottom before a 7.2% rally. The B shares have gained just 6% over the past year, significantly trailing the S&P 500's 19% surge, with the widest underperformance gap of the year."
+"<p>A <a href="https://www.benzinga.com/example-url">Death Cross pattern</a> appeared on Berkshire's chart in late October, marking the first such occurrence since August when the same signal preceded the stock's exact bottom before a 7.2% rally. The B shares have gained just 6% over the past year, significantly trailing the S&P 500's 19% surge, with the widest underperformance gap of the year.</p>"
 
 **Example 2 - Historical Decision:**
-"In past shareholder letters, Buffett described the original purchase of <a href="url">Berkshire Hathaway itself</a> as his 'dumbest' investment, estimating it cost him $200 billion in potential value over time. This admission came decades after the 1965 textile company acquisition, which Buffett later acknowledged was driven by spite rather than sound business judgment."
+"<p>In past shareholder letters, Buffett described the original purchase of <a href="https://www.benzinga.com/example-url">Berkshire Hathaway itself</a> as his 'dumbest' investment, estimating it cost him $200 billion in potential value over time. This admission came decades after the 1965 textile company acquisition, which Buffett later acknowledged was driven by spite rather than sound business judgment.</p>"
 
 **Example 3 - Recent Performance:**
-"Berkshire's shares dropped nearly 15% to $459 in August following Buffett's May announcement that he would <a href="url">step down as CEO</a> at year-end, though they have since climbed 7.2% as some investors bet the worst is over. Analyst downgrades from firms like Keefe, Bruyette & Woods cited 'historically unique succession risk' as the primary concern."
+"<p>Berkshire's shares dropped nearly 15% to $459 in August following Buffett's May announcement that he would <a href="https://www.benzinga.com/example-url">step down as CEO</a> at year-end, though they have since climbed 7.2% as some investors bet the worst is over. Analyst downgrades from firms like Keefe, Bruyette & Woods cited 'historically unique succession risk' as the primary concern.</p>"
+
+**NOTE**: In the examples above, replace "https://www.benzinga.com/example-url" with the actual URL: ${article.url}
 
 **Why These Work:**
 - ✓ Multiple specific numbers (6%, 19%, 7.2%, 15%, $459)
@@ -303,28 +308,55 @@ EXAMPLES OF GOOD THREE-WORD PHRASES TO HYPERLINK:
 ✓ Will your paragraph include these specific facts?
 ✓ Have you included temporal markers (has previously, in past interviews, historically)?
 ✓ Is it clear this is BACKGROUND context, not current simultaneous news?
+✓ **MOST IMPORTANT**: Have you included the hyperlink with the exact URL: ${article.url}?
 ✓ Have you chosen actual words from your sentence to hyperlink (NOT placeholder text)?
 ✓ Does your hyperlink phrase actually appear in your sentence?
 ✓ Is it exactly 2 sentences?
+✓ **VERIFY**: Does your output contain this exact pattern: <a href="${article.url}">?
 
 **CRITICAL REMINDERS:** 
 - DO NOT use "actual three word phrase" or "three word phrase" or "REPLACE_WITH_REAL_PHRASE" in your output
 - These are PLACEHOLDERS - replace them with real words from your sentence
 - The hyperlink must be on actual words that appear in your paragraph
 - Use temporal markers so readers know this is historical context, not current news
+- **ABSOLUTE REQUIREMENT**: Your output MUST contain <a href="${article.url}"> - check this before submitting!
 
-**CRITICAL**: You MUST include the hyperlink. Do not skip this requirement. The hyperlink format must be: <a href="${article.url}">YOUR_ACTUAL_PHRASE_HERE</a> where YOUR_ACTUAL_PHRASE_HERE is replaced with actual words from your sentence.
+**CRITICAL - FINAL REMINDER**: You MUST include the hyperlink. Do not skip this requirement. The hyperlink format must be: <a href="${article.url}">YOUR_ACTUAL_PHRASE_HERE</a> where YOUR_ACTUAL_PHRASE_HERE is replaced with actual words from your sentence. Your output will be REJECTED if the hyperlink is missing.
 
 Write the context paragraph now (ONLY 1 PARAGRAPH with 2 sentences):`;
 
-        const completion = await openai.chat.completions.create({
+        let completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 1500,
           temperature: 0.8,
         });
 
-        const contextText = completion.choices[0].message?.content?.trim() || '';
+        let contextText = completion.choices[0].message?.content?.trim() || '';
+        
+        // If hyperlink is missing, retry with an even more explicit prompt
+        if (contextText && !contextText.includes(`<a href="${article.url}">`)) {
+          console.warn(`Hyperlink missing in first attempt, retrying with explicit instruction...`);
+          const retryPrompt = `${prompt}
+
+**CRITICAL RETRY INSTRUCTION**: Your previous response was missing the required hyperlink. You MUST include this exact hyperlink in your output: <a href="${article.url}">YOUR_PHRASE</a>
+Replace YOUR_PHRASE with actual words from your sentence. Do not submit without the hyperlink.`;
+          
+          completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: retryPrompt }],
+            max_tokens: 1500,
+            temperature: 0.7, // Slightly lower temperature for more focused output
+          });
+          
+          contextText = completion.choices[0].message?.content?.trim() || '';
+          
+          if (contextText && !contextText.includes(`<a href="${article.url}">`)) {
+            console.error(`Hyperlink still missing after retry. Generated text: ${contextText.substring(0, 300)}`);
+          } else {
+            console.log('Hyperlink successfully included after retry');
+          }
+        }
         
         // Log token usage for this context generation
         if (completion.usage) {
