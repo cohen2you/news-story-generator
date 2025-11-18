@@ -18,7 +18,10 @@ interface EnhancedContextFormProps {
 
 export default function EnhancedContextForm({ currentArticle, onContextAdded, onError }: EnhancedContextFormProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [articleUrl, setArticleUrl] = useState('');
+  const [inputMode, setInputMode] = useState<'search' | 'url'>('search');
   const [isSearching, setIsSearching] = useState(false);
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false);
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticles, setSelectedArticles] = useState<Article[]>([]);
   const [isAddingContext, setIsAddingContext] = useState(false);
@@ -71,6 +74,46 @@ export default function EnhancedContextForm({ currentArticle, onContextAdded, on
     }
   };
 
+  const fetchArticleFromUrl = async () => {
+    if (!articleUrl.trim()) {
+      setSearchError('Please enter a Benzinga article URL');
+      return;
+    }
+
+    setIsFetchingUrl(true);
+    setSearchError('');
+    setArticles([]);
+    setSelectedArticles([]);
+
+    try {
+      const response = await fetch('/api/bz/fetch-article', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: articleUrl.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch article from URL');
+      }
+
+      if (data.article) {
+        setArticles([data.article]);
+        // Automatically select the article since user explicitly provided the URL
+        setSelectedArticles([data.article]);
+      } else {
+        setSearchError('No article data returned from URL');
+      }
+    } catch (error: any) {
+      setSearchError(error.message || 'Failed to fetch article from URL');
+    } finally {
+      setIsFetchingUrl(false);
+    }
+  };
+
   const toggleArticleSelection = (article: Article) => {
     setSelectedArticles(prev => {
       const isSelected = prev.some(a => a.url === article.url);
@@ -116,6 +159,7 @@ export default function EnhancedContextForm({ currentArticle, onContextAdded, on
       
       // Reset form
       setSearchTerm('');
+      setArticleUrl('');
       setArticles([]);
       setSelectedArticles([]);
       setSearchError('');
@@ -145,27 +189,83 @@ export default function EnhancedContextForm({ currentArticle, onContextAdded, on
         Add Benzinga Context (Enhanced)
       </h3>
       <p className="text-sm text-gray-600 mb-4">
-        Search for specific keywords or phrases in recent Benzinga articles and select up to 3 articles to add as context to your story.
+        Search for specific keywords or phrases in recent Benzinga articles, or enter a Benzinga article URL directly. Select up to 3 articles to add as context to your story.
       </p>
       
+      {/* Mode Toggle */}
       <div className="mb-4">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="e.g., 'Wegovy', 'Novo Nordisk', 'weight loss drugs', 'FDA approval'..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onKeyPress={(e) => e.key === 'Enter' && searchArticles()}
-          />
+        <div className="flex gap-2 border-b border-gray-200">
           <button
-            onClick={searchArticles}
-            disabled={isSearching}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => {
+              setInputMode('search');
+              setSearchError('');
+              setArticles([]);
+              setSelectedArticles([]);
+            }}
+            className={`px-4 py-2 font-medium text-sm ${
+              inputMode === 'search'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
           >
-            {isSearching ? 'Searching...' : 'Search'}
+            Search
+          </button>
+          <button
+            onClick={() => {
+              setInputMode('url');
+              setSearchError('');
+              setArticles([]);
+              setSelectedArticles([]);
+            }}
+            className={`px-4 py-2 font-medium text-sm ${
+              inputMode === 'url'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Enter URL
           </button>
         </div>
+      </div>
+      
+      <div className="mb-4">
+        {inputMode === 'search' ? (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="e.g., 'Wegovy', 'Novo Nordisk', 'weight loss drugs', 'FDA approval'..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onKeyPress={(e) => e.key === 'Enter' && searchArticles()}
+            />
+            <button
+              onClick={searchArticles}
+              disabled={isSearching}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSearching ? 'Searching...' : 'Search'}
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={articleUrl}
+              onChange={(e) => setArticleUrl(e.target.value)}
+              placeholder="https://www.benzinga.com/..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onKeyPress={(e) => e.key === 'Enter' && fetchArticleFromUrl()}
+            />
+            <button
+              onClick={fetchArticleFromUrl}
+              disabled={isFetchingUrl}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isFetchingUrl ? 'Fetching...' : 'Fetch Article'}
+            </button>
+          </div>
+        )}
         
         {searchError && (
           <p className="text-red-600 text-sm mt-2">{searchError}</p>

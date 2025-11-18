@@ -74,7 +74,15 @@ ${beforeContext || '(Beginning of article)'}
 **PARAGRAPHS AFTER YOUR INSERTION POINT:**
 ${afterContext || '(End of article)'}
 
-**YOUR TASK**: Write a paragraph that flows naturally from the "BEFORE" content and transitions smoothly into the "AFTER" content. Your first sentence should connect to what comes before, and your last sentence should set up what comes after.
+**YOUR TASK**: Write a paragraph that flows naturally from the "BEFORE" content and transitions smoothly into the "AFTER" content. 
+
+**CRITICAL TRANSITION RULES:**
+1. Your FIRST sentence should connect to what comes BEFORE
+2. Your LAST sentence must clearly set up what comes AFTER
+3. If the "AFTER" content is about a different topic/company/product than your context paragraph, make sure your last sentence doesn't create confusion
+4. Avoid ending with ambiguous phrases like "The model's ability..." or "This feature..." if the next paragraph is about a different model/feature
+5. Instead, end with a clear bridge that distinguishes your context topic from the main article topic
+6. Example: If your context is about Grok 5 and the next paragraph is about Gemini 3, end with something like: "This competitive development reflects the broader industry race for AI dominance" - NOT "The model's ability..." which would confuse readers
 
 Selected Benzinga Article to Add (FULL TEXT - analyze completely):
 Headline: ${article.headline}
@@ -206,6 +214,11 @@ Requirements:
    - If the context is historical, connect it to the current story: "This development builds on previous industry moves..." or "The focus on [current topic] reflects ongoing industry evolution..."
    - Avoid abrupt starts like "Historically, [Person] has stated..." unless it directly follows a related discussion
    - Think: How does this context relate to what the reader just read? Make that connection explicit
+   - **CRITICAL - END TRANSITION**: Your LAST sentence must clearly set up what comes AFTER your paragraph
+   - If the next paragraph is about the main article's topic (e.g., Gemini 3), make sure your last sentence doesn't leave ambiguous references
+   - Avoid ending with phrases like "The model's ability..." or "This feature..." that could be misinterpreted as referring to the context topic when the next paragraph is about the main article
+   - Instead, end with a clear transition that distinguishes between the context topic and the main article topic
+   - Example: If context is about Grok 5 and next paragraph is about Gemini 3, end with: "This competitive dynamic highlights the broader industry race..." NOT "The model's ability..." (which is ambiguous)
 6. **CRITICAL TEMPORAL CONTEXT**: Since the context article was published ${dateContext}, you MUST use temporal markers to show this is historical/background information:
    - Use phrases like: "has previously discussed", "in past interviews", "historically noted", "in earlier statements"
    - If quoting or referencing past events, use past tense: "said", "called", "described", "labeled"
@@ -293,7 +306,12 @@ GOOD EXAMPLES (SPECIFIC FACTS, PROPER HYPERLINKS, CLEAR INTEGRATION):
 "<p>Berkshire's shares dropped nearly 15% to $459 in August following Buffett's May announcement that he would <a href="https://www.benzinga.com/example-url">step down as CEO</a> at year-end, though they have since climbed 7.2% as some investors bet the worst is over. Analyst downgrades from firms like Keefe, Bruyette & Woods cited 'historically unique succession risk' as the primary concern.</p>"
 
 **Example 4 - Competitive Context (GOOD TRANSITION):**
-"<p>This development comes as competitors are also investing heavily in AI infrastructure, with <a href="https://www.benzinga.com/example-url">Elon Musk's xAI announcing plans</a> for a 6 trillion parameter Grok 5 model set to launch in Q1 2026, which would significantly surpass current industry benchmarks. The race to develop more powerful AI models reflects the massive capital expenditures across the tech sector, with companies collectively spending over $380 billion this year on AI infrastructure.</p>"
+"<p>This development comes as competitors are also investing heavily in AI infrastructure, with <a href="https://www.benzinga.com/example-url">Elon Musk's xAI announcing plans</a> for a 6 trillion parameter Grok 5 model set to launch in Q1 2026, which would significantly surpass current industry benchmarks. This competitive dynamic highlights the broader industry race for AI dominance, as major tech companies collectively invest over $380 billion this year in developing next-generation capabilities.</p>"
+
+**Why This Works:**
+- First sentence connects to main article ("This development comes as...")
+- Last sentence creates a clear bridge ("This competitive dynamic highlights...") that doesn't leave ambiguous references
+- Ends with industry-wide context, not a specific feature that could be confused with the next paragraph
 
 **Example 5 - Historical Context (GOOD TRANSITION):**
 "<p>The focus on practical AI applications reflects broader industry evolution, as <a href="https://www.benzinga.com/example-url">previous AI launches have emphasized</a> theoretical capabilities over real-world utility, leading to criticism that early models were overly sycophantic. This shift toward more practical, task-oriented AI solutions represents a maturation of the technology, moving from impressive demos to tools that genuinely enhance productivity.</p>"
@@ -339,11 +357,19 @@ BAD EXAMPLES (DO NOT WRITE LIKE THIS):
 - Feels like a random insertion, not integrated into the narrative
 - Doesn't bridge from what comes before
 
-✓ GOOD VERSION: "This development comes as competitors are also pursuing advanced AI capabilities, with Elon Musk's xAI aiming to achieve artificial general intelligence through Grok 5..."
+❌ "This development comes as competitors are also pursuing advanced AI capabilities, with Elon Musk's xAI aiming to achieve AGI through Grok 5. The model's ability to process multimodal data sets it apart from competitors."
+**Why Bad:**
+- Good start, but bad ending
+- "The model's ability..." is ambiguous - could refer to Grok 5 or the main article's model
+- If next paragraph is about Gemini 3, readers will be confused about which model is being discussed
+
+✓ GOOD VERSION: "This development comes as competitors are also pursuing advanced AI capabilities, with Elon Musk's xAI aiming to achieve artificial general intelligence through Grok 5, set to launch in Q1 2026 with 6 trillion parameters. This competitive dynamic highlights the broader industry race for AI dominance, as companies invest billions in developing next-generation capabilities."
 **Why Good:**
 - Creates a smooth transition with "This development comes as..."
 - Connects to the main article's topic (AI development)
 - Frames it as part of the competitive landscape
+- Last sentence clearly distinguishes the context (competitive landscape) from specific model features
+- Ends with industry-wide context, not a specific feature that could be confused
 
 EXAMPLES OF GOOD THREE-WORD PHRASES TO HYPERLINK:
 - "Dexter Shoe Company"
@@ -357,6 +383,9 @@ EXAMPLES OF GOOD THREE-WORD PHRASES TO HYPERLINK:
 ✓ Will your paragraph include these specific facts?
 ✓ **CRITICAL**: Does your first sentence create a smooth transition from the main article's topic?
 ✓ Have you connected the context to the current story's theme (competitive landscape, industry trends, etc.)?
+✓ **CRITICAL**: Does your LAST sentence clearly set up what comes AFTER your paragraph?
+✓ Have you avoided ending with ambiguous phrases like "The model's ability..." or "This feature..." that could be confused with the next paragraph?
+✓ If the next paragraph is about a different topic, does your last sentence clearly distinguish your context topic from the main article topic?
 ✓ Have you included temporal markers (has previously, in past interviews, historically) where appropriate?
 ✓ Is it clear this is BACKGROUND context, not current simultaneous news?
 ✓ **MOST IMPORTANT**: Have you included the hyperlink with the exact URL: ${article.url}?
@@ -365,6 +394,7 @@ EXAMPLES OF GOOD THREE-WORD PHRASES TO HYPERLINK:
 ✓ Is it exactly 2 sentences?
 ✓ **VERIFY**: Does your output contain this exact pattern: <a href="${article.url}">?
 ✓ **FLOW CHECK**: If you read your paragraph in context of the article, does it feel natural or abrupt?
+✓ **END CHECK**: Read the "AFTER" content - does your last sentence create confusion or clarity?
 
 **CRITICAL REMINDERS:** 
 - DO NOT use "actual three word phrase" or "three word phrase" or "REPLACE_WITH_REAL_PHRASE" in your output
