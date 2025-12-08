@@ -622,7 +622,7 @@ ${prompt}`;
           }
           
           // Add this context to the working article immediately
-          workingArticle = await addContextToArticle(workingArticle, formattedContext, isFirstArticle);
+          workingArticle = await addContextToArticle(workingArticle, formattedContext, isFirstArticle, requestedProvider);
           
           contextSources.push({
             headline: article.headline,
@@ -659,7 +659,7 @@ ${prompt}`;
 }
 
 // Function to add context to an article using hybrid insertion approach
-async function addContextToArticle(article: string, contextText: string, isFirstArticle: boolean): Promise<string> {
+async function addContextToArticle(article: string, contextText: string, isFirstArticle: boolean, requestedProvider?: 'openai' | 'gemini'): Promise<string> {
   // For the first article, we need to generate a subhead and insert the context properly
   if (isFirstArticle) {
     // Find the optimal insertion point using hybrid approach
