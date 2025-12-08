@@ -275,5 +275,4 @@ class AIProviderService {
 
 // Export singleton instance
 export const aiProvider = new AIProviderService();
-export type { AIProvider };
 
