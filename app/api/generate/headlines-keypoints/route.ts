@@ -1,9 +1,5 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { aiProvider } from '@/lib/aiProvider';
 
 export async function POST(req: Request) {
   try {
@@ -55,9 +51,12 @@ Examples of good headlines:
 
 The key points should capture the most critical information in exactly 12 words each.`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 500;
+    
+    const aiResponse = await aiProvider.generateCompletion(
+      [
         {
           role: "system",
           content: "You are a professional financial news editor with expertise in creating compelling headlines and concise summaries."
@@ -67,11 +66,14 @@ The key points should capture the most critical information in exactly 12 words 
           content: prompt
         }
       ],
-      temperature: 0.7,
-      max_tokens: 500
-    });
+      {
+        model,
+        maxTokens,
+        temperature: 0.7,
+      }
+    );
 
-    const response = completion.choices[0]?.message?.content || '';
+    const response = aiResponse.content;
     
     // Parse the response to extract headlines and key points
     const headlines: string[] = [];

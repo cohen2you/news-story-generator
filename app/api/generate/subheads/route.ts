@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { aiProvider } from '@/lib/aiProvider';
 
 function cleanH2(text: string) {
   // Remove markdown **, ##, or other symbols, trim, and capitalize each word
@@ -66,14 +64,20 @@ export async function POST(request: Request) {
     `.trim();
     
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 200,
-      temperature: 0.8,
-    });
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 200;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.8,
+      }
+    );
 
-    const h2Headings = completion.choices[0].message?.content?.trim() ?? '';
+    const h2Headings = response.content.trim();
 
     // Clean and extract the H2 headings
     const lines = h2Headings.split('\n').map(line => line.trim()).filter(line => line.length > 0);

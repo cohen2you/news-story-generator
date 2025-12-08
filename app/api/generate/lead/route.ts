@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { aiProvider } from '@/lib/aiProvider';
 
 export async function POST(request: Request) {
   try {
@@ -26,14 +24,20 @@ ${articleText}
 Lead paragraph:
 `;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 250,
-      temperature: 0.7,
-    });
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 250;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.7,
+      }
+    );
 
-    const lead = completion.choices?.[0]?.message?.content?.trim() || '';
+    const lead = response.content.trim();
 
     return NextResponse.json({ lead });
   } catch (error) {

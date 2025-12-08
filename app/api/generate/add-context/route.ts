@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { aiProvider } from '@/lib/aiProvider';
 import { generateTopicUrl, MODEL_CONFIG } from '../../../../lib/api';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 
@@ -22,14 +20,20 @@ Article: ${currentArticle.substring(0, 1000)}
 
 Return only the topics as a comma-separated list, no explanations:`;
 
-    const topicCompletion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: topicPrompt }],
-      max_tokens: 100,
-      temperature: 0.3,
-    });
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 100;
+    
+    const topicResponse = await aiProvider.generateCompletion(
+      [{ role: 'user', content: topicPrompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.3,
+      }
+    );
 
-    const topics = topicCompletion.choices[0].message?.content?.trim() || '';
+    const topics = topicResponse.content.trim();
     if (!topics) return null;
 
     // Try each topic to find a relevant article
@@ -440,23 +444,25 @@ Requirements:
 
 Write the 1 context paragraph now (ONLY 1 PARAGRAPH with 2 sentences):`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 1500,
-      temperature: 0.8,
-    });
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 1500;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.8,
+      }
+    );
 
-    const contextParagraphs = completion.choices[0].message?.content?.trim() || '';
+    const contextParagraphs = response.content.trim();
 
-    // Log token usage for this context generation
-    if (completion.usage) {
-      console.log(`\n📊 TOKEN USAGE for context generation:`);
-      console.log(`   - Prompt tokens: ${completion.usage.prompt_tokens}`);
-      console.log(`   - Completion tokens: ${completion.usage.completion_tokens}`);
-      console.log(`   - Total tokens: ${completion.usage.total_tokens}`);
-      console.log(`   - Model: gpt-4o-mini\n`);
-    }
+    // Log provider info
+    console.log(`\n📊 AI PROVIDER for context generation:`);
+    console.log(`   - Provider: ${response.provider}`);
+    console.log(`   - Model: ${model}\n`);
 
     // Debug: Log the generated context to see if hyperlinks are included
     console.log('Generated context paragraphs:', contextParagraphs);
@@ -507,14 +513,20 @@ Examples of good context subheads:
 
 Create 1 subhead for the context section:`;
 
-      const contextSubheadCompletion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: contextSubheadPrompt }],
-        max_tokens: 50,
-        temperature: 0.7,
-      });
+      const currentProvider = aiProvider.getCurrentProvider();
+      const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+      const maxTokens = currentProvider === 'gemini' ? 8192 : 50;
+      
+      const contextSubheadResponse = await aiProvider.generateCompletion(
+        [{ role: 'user', content: contextSubheadPrompt }],
+        {
+          model,
+          maxTokens,
+          temperature: 0.7,
+        }
+      );
 
-      contextSubhead = contextSubheadCompletion.choices[0].message?.content?.trim() || '';
+      contextSubhead = contextSubheadResponse.content.trim();
       if (contextSubhead) {
         contextSubhead = contextSubhead.replace(/\*\*/g, '').replace(/^##\s*/, '').replace(/^["']|["']$/g, '').trim();
       }

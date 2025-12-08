@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { aiProvider } from '@/lib/aiProvider';
 import { MODEL_CONFIG } from '../../../../lib/api';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 const BZ_PRICE_URL = 'https://api.benzinga.com/api/v2/quoteDelayed';
@@ -52,14 +50,20 @@ Example formats:
 
 Return only the CTA text, no additional formatting.`;
 
-                   const response = await openai.chat.completions.create({
-        model: MODEL,
-        messages: [{ role: 'user', content: prompt }],
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 100;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
         temperature: 0.7,
-        max_tokens: 100,
-      });
+      }
+    );
 
-     return response.choices[0].message?.content?.trim() || '';
+    return response.content.trim();
   } catch (error) {
     console.error('Error generating CTA:', error);
     return '';
@@ -83,14 +87,20 @@ Generate 3 subheadings that:
 
 Return only the 3 subheadings, one per line, no numbering or additional formatting.`;
 
-                   const response = await openai.chat.completions.create({
-        model: MODEL,
-        messages: [{ role: 'user', content: prompt }],
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 150;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
         temperature: 0.7,
-        max_tokens: 150,
-      });
+      }
+    );
 
-     const subheadsText = response.choices[0].message?.content?.trim() || '';
+    const subheadsText = response.content.trim();
     return subheadsText.split('\n').filter((line: string) => line.trim()).slice(0, 3);
   } catch (error) {
     console.error('Error generating subheads:', error);
@@ -190,14 +200,31 @@ Provide a JSON response with:
 Focus on the actual news content, not generic market data. Only include specific symbols if they are directly mentioned or highly relevant.`;
 
   try {
-                   const response = await openai.chat.completions.create({
-        model: MODEL,
-        messages: [{ role: 'user', content: prompt }],
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 500;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
         temperature: 0.3,
-        max_tokens: 500,
-      });
+        responseFormat: { type: 'json_object' },
+      }
+    );
 
-     const analysis = JSON.parse(response.choices[0].message?.content || '{}');
+    // Clean JSON response (especially for Gemini)
+    let cleanContent = response.content.trim();
+    cleanContent = cleanContent.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) cleanContent = jsonMatch[0];
+    const lastBracketIndex = cleanContent.lastIndexOf('}');
+    if (lastBracketIndex !== -1) {
+      cleanContent = cleanContent.substring(0, lastBracketIndex + 1);
+    }
+
+    const analysis = JSON.parse(cleanContent || '{}');
     return analysis;
   } catch (error) {
     console.error('Error analyzing source content:', error);
@@ -444,14 +471,20 @@ export async function POST(req: Request) {
       subheadTexts
     );
     
-                   const res = await openai.chat.completions.create({
-        model: MODEL,
-        messages: [{ role: 'user', content: prompt }],
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 1500;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
         temperature: 0.7,
-        max_tokens: 1500,
-      });
+      }
+    );
 
-     const article = res.choices[0].message?.content?.trim() || '';
+    const article = response.content.trim();
     
     return NextResponse.json({ 
       article,

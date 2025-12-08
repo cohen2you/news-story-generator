@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { aiProvider } from '@/lib/aiProvider';
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 
 async function fetchTechnicalData(ticker: string) {
@@ -100,14 +98,20 @@ Requirements:
 
 Write the 2 technical context paragraphs now:`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 300,
-      temperature: 0.7,
-    });
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 300;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.7,
+      }
+    );
 
-    const technicalParagraphs = completion.choices[0].message?.content?.trim() || '';
+    const technicalParagraphs = response.content.trim();
 
     if (!technicalParagraphs) {
       return NextResponse.json({ error: 'Failed to generate technical context.' }, { status: 500 });
@@ -151,14 +155,20 @@ Examples of good technical subheads:
 
 Create 1 subhead for the technical context section:`;
 
-      const subheadCompletion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: subheadPrompt }],
-        max_tokens: 50,
-        temperature: 0.7,
-      });
+      const currentProvider = aiProvider.getCurrentProvider();
+      const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+      const maxTokens = currentProvider === 'gemini' ? 8192 : 50;
+      
+      const subheadResponse = await aiProvider.generateCompletion(
+        [{ role: 'user', content: subheadPrompt }],
+        {
+          model,
+          maxTokens,
+          temperature: 0.7,
+        }
+      );
 
-      technicalSubhead = subheadCompletion.choices[0].message?.content?.trim() || '';
+      technicalSubhead = subheadResponse.content.trim();
       if (technicalSubhead) {
         technicalSubhead = technicalSubhead.replace(/\*\*/g, '').replace(/^##\s*/, '').replace(/^["']|["']$/g, '').trim();
       }

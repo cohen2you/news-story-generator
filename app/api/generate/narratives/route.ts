@@ -1,9 +1,5 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { aiProvider } from '@/lib/aiProvider';
 
 export async function POST(req: Request) {
   try {
@@ -20,15 +16,21 @@ ${storyText}
 
 Provide the three narrative options as a numbered list, each a single sentence or short paragraph.`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 300,
-    });
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 300;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.7,
+      }
+    );
 
     // Extract the text output
-    const rawOutput = completion.choices[0].message.content;
+    const rawOutput = response.content;
 
     // Parse the numbered list into an array of strings
     // Simple parsing: split by lines, filter lines that start with 1. 2. 3.

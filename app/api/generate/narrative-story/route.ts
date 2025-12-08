@@ -1,9 +1,5 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { aiProvider } from '@/lib/aiProvider';
 
 export async function POST(req: Request) {
   try {
@@ -27,14 +23,20 @@ ${narrativeOption}
 Narrative Story:
 `;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.75,
-      max_tokens: 700,
-    });
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 700;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.75,
+      }
+    );
 
-    const narrative = completion.choices[0].message.content;
+    const narrative = response.content;
 
     return NextResponse.json({ narrative });
   } catch (error: any) {

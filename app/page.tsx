@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import LocalDate from '../components/LocalDate';
 import EnhancedContextForm from '../components/EnhancedContextForm';
 import EditorialReviewForm from '../components/EditorialReviewForm';
+import { AIProviderSelector } from '../components/AIProviderSelector';
 
 
 
@@ -120,6 +121,7 @@ export default function PRStoryGeneratorPage() {
   const [headlinesAndKeyPoints, setHeadlinesAndKeyPoints] = useState<{ headlines: string[], keyPoints: string[] } | null>(null);
   const [generatingHeadlines, setGeneratingHeadlines] = useState(false);
   const [copiedItems, setCopiedItems] = useState<{ [key: string]: boolean }>({});
+  const [articleProvider, setArticleProvider] = useState<{ provider: string; model: string } | null>(null);
 
 
 
@@ -215,7 +217,9 @@ export default function PRStoryGeneratorPage() {
     setGenerating(true);
     setGenError('');
     setArticle('');
+    setArticleProvider(null); // Reset provider indicator
     setLoadingStory(true);
+    setScrapingError(''); // Clear scraping error when starting story generation
 
     // Use primary text as source content
     let sourceText = primaryText;
@@ -375,6 +379,62 @@ export default function PRStoryGeneratorPage() {
         }
       }
       
+             // Get current provider from selector component state
+             // We'll get it from the DOM since we can't access component state directly
+             let currentProvider: 'openai' | 'gemini' = 'openai';
+             let providerSource = 'default';
+             
+             try {
+               // Try to get from DOM first (most reliable - reflects user's actual selection)
+               if (typeof document !== 'undefined') {
+                 const providerSelect = document.getElementById('ai-provider-select') as HTMLSelectElement;
+                 if (providerSelect) {
+                   const domValue = providerSelect.value;
+                   console.log('🔍 Found provider select element, value:', domValue);
+                   if (domValue === 'openai' || domValue === 'gemini') {
+                     currentProvider = domValue;
+                     providerSource = 'DOM';
+                     console.log('✅ Provider from UI selector (DOM):', currentProvider);
+                   } else {
+                     console.warn('⚠️ Provider select has invalid value:', domValue);
+                   }
+                 } else {
+                   console.warn('⚠️ Provider select element not found in DOM');
+                 }
+               } else {
+                 console.warn('⚠️ document is undefined (SSR?)');
+               }
+               
+               // If DOM didn't work, try API as fallback
+               if (providerSource === 'default') {
+                 try {
+                   console.log('🔄 Trying API fallback for provider...');
+                   const providerRes = await fetch('/api/ai-provider');
+                   if (providerRes.ok) {
+                     const providerData = await providerRes.json();
+                     console.log('📡 API provider response:', providerData);
+                     if (providerData.provider === 'openai' || providerData.provider === 'gemini') {
+                       currentProvider = providerData.provider;
+                       providerSource = 'API';
+                       console.log('✅ Provider from API:', currentProvider);
+                     } else {
+                       console.warn('⚠️ API returned invalid provider:', providerData.provider);
+                     }
+                   } else {
+                     console.warn('⚠️ API request failed with status:', providerRes.status);
+                   }
+                 } catch (apiError) {
+                   console.warn('⚠️ Could not fetch provider from API:', apiError);
+                 }
+               }
+             } catch (e) {
+               console.error('❌ Error getting provider:', e);
+               currentProvider = 'openai'; // Safe default
+             }
+             
+             console.log(`📌 Final provider decision: ${currentProvider} (source: ${providerSource})`);
+             console.log(`📤 Will send provider "${currentProvider}" in request body`);
+             
              const requestBody = {
            ticker: ticker || '',
            sourceText: sourceText,
@@ -392,9 +452,11 @@ export default function PRStoryGeneratorPage() {
            includeSubheads,
            subheadTexts,
            inputMode: inputMode,
+           provider: currentProvider, // Include provider in request
        };
       
-      console.log('Sending to story generation:', requestBody); // Debug log
+      console.log('📤 Sending to story generation:', { ...requestBody, sourceText: `[${requestBody.sourceText.length} chars]` }); // Debug log
+      console.log('📤 Provider being sent:', requestBody.provider);
       console.log('Source text length:', sourceText.length); // Debug log
       console.log('Source text preview:', sourceText.substring(0, 200)); // Debug log
       console.log('Source URL being sent:', sourceUrl); // Debug log
@@ -409,6 +471,10 @@ export default function PRStoryGeneratorPage() {
       const data = await res.json();
       if (!res.ok || !data.story) throw new Error(data.error || 'Failed to generate story');
              setArticle(data.story);
+             // Store provider info if available
+             if (data.provider && data.model) {
+               setArticleProvider({ provider: data.provider, model: data.model });
+             }
              // Comparison now handled by Copyleaks directly
        setPreviouslyUsedContextUrls([]); // Clear previously used context URLs when generating new article
        setLeadHyperlinkArticleIndex(0); // Reset hyperlink article index for new article
@@ -1211,6 +1277,9 @@ export default function PRStoryGeneratorPage() {
           Clear All Data
         </button>
       </div>
+      
+      {/* AI Provider Selector */}
+      <AIProviderSelector />
       <div style={{ marginBottom: 20 }}>
         <label>
           Stock Ticker:{' '}
@@ -1346,192 +1415,63 @@ export default function PRStoryGeneratorPage() {
        {contextError && <div style={{ color: 'red', marginBottom: 10 }}>{contextError}</div>}
              {article && (
          <div style={{ marginBottom: 20 }}>
-           {/* Enhanced Context Search Interface - Moved above article */}
-           {showContextSearch && (
-             <div style={{ 
-               marginBottom: 20, 
-               padding: 16, 
-               border: '1px solid #e5e7eb', 
-               borderRadius: 8, 
-               backgroundColor: '#f9fafb' 
+           {/* AI Provider Indicator */}
+           {articleProvider && (
+             <div style={{
+               marginBottom: '16px',
+               padding: '10px 16px',
+               background: articleProvider.provider === 'gemini' 
+                 ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)'
+                 : 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+               border: `2px solid ${articleProvider.provider === 'gemini' ? '#f59e0b' : '#2563eb'}`,
+               borderRadius: '8px',
+               display: 'flex',
+               alignItems: 'center',
+               gap: '10px',
+               fontSize: '13px',
+               fontWeight: '600',
+               color: articleProvider.provider === 'gemini' ? '#92400e' : '#1e40af'
              }}>
-               <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 18, fontWeight: 'bold' }}>
-                 Search for Benzinga Articles
-               </h3>
-               
-               <div style={{ marginBottom: 16 }}>
-                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                   <input
-                     type="text"
-                     value={contextSearchTerm}
-                     onChange={(e) => setContextSearchTerm(e.target.value)}
-                     placeholder="e.g., 'Wegovy', 'Novo Nordisk', 'weight loss drugs', 'FDA approval'..."
-                     style={{ 
-                       flex: 1, 
-                       padding: '8px 12px', 
-                       border: '1px solid #d1d5db', 
-                       borderRadius: 4,
-                       fontSize: 14
-                     }}
-                     onKeyPress={(e) => e.key === 'Enter' && searchContextArticles()}
-                   />
-                   <button
-                     onClick={searchContextArticles}
-                     disabled={isSearchingContext}
-                     style={{ 
-                       padding: '8px 16px', 
-                       background: isSearchingContext ? '#6b7280' : '#2563eb', 
-                       color: 'white', 
-                       border: 'none', 
-                       borderRadius: 4,
-                       fontSize: 14,
-                       cursor: isSearchingContext ? 'not-allowed' : 'pointer'
-                     }}
-                   >
-                     {isSearchingContext ? 'Searching...' : 'Search'}
-                   </button>
-                   <button
-                     onClick={() => setShowContextSearch(false)}
-                     style={{ 
-                       padding: '8px 16px', 
-                       background: '#6b7280', 
-                       color: 'white', 
-                       border: 'none', 
-                       borderRadius: 4,
-                       fontSize: 14,
-                       cursor: 'pointer'
-                     }}
-                   >
-                     Cancel
-                   </button>
-                 </div>
-               </div>
-
-               {contextSearchResults.length > 0 && (
-                 <div style={{ marginBottom: 16 }}>
-                   <h4 style={{ marginBottom: 12, fontSize: 16, fontWeight: 'bold' }}>
-                     Found {contextSearchResults.length} articles (select up to 3):
-                   </h4>
-                   
-                   <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 16 }}>
-                     {contextSearchResults.map((article, index) => {
-                       const isSelected = selectedContextArticles.some(a => a.url === article.url);
-                       return (
-                         <div
-                           key={`${article.url}-${index}`}
-                           style={{
-                             border: isSelected ? '2px solid #2563eb' : '1px solid #d1d5db',
-                             borderRadius: 6,
-                             padding: 12,
-                             marginBottom: 8,
-                             cursor: 'pointer',
-                             backgroundColor: isSelected ? '#eff6ff' : 'white',
-                             transition: 'all 0.2s'
-                           }}
-                           onClick={() => toggleContextArticleSelection(article)}
-                         >
-                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                             <input
-                               type="checkbox"
-                               checked={isSelected}
-                               onChange={() => toggleContextArticleSelection(article)}
-                               style={{ marginTop: 2 }}
-                             />
-                             <div style={{ flex: 1 }}>
-                               <h5 style={{ 
-                                 margin: '0 0 8px 0', 
-                                 fontSize: 14, 
-                                 fontWeight: 'bold',
-                                 color: '#1f2937'
-                               }}>
-                                 {article.headline}
-                               </h5>
-                               <p style={{ 
-                                 margin: '0 0 8px 0', 
-                                 fontSize: 12, 
-                                 color: '#6b7280',
-                                 lineHeight: 1.4
-                               }}>
-                                 {article.body.substring(0, 120)}...
-                               </p>
-                               <div style={{ 
-                                 display: 'flex', 
-                                 justifyContent: 'space-between', 
-                                 alignItems: 'center',
-                                 fontSize: 11,
-                                 color: '#9ca3af'
-                               }}>
-                                 <span>
-                                   {new Date(article.created).toLocaleDateString('en-US', {
-                                     month: 'short',
-                                     day: 'numeric',
-                                     hour: '2-digit',
-                                     minute: '2-digit',
-                                   })}
-                                 </span>
-                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                 <span>Relevance: {article.relevanceScore}</span>
-                                   {article.url && (
-                                     <a 
-                                       href={article.url} 
-                                       target="_blank" 
-                                       rel="noopener noreferrer"
-                                       style={{ color: '#2563eb', textDecoration: 'underline' }}
-                                       onClick={(e) => e.stopPropagation()} // Prevent triggering the checkbox selection
-                                     >
-                                       View Article
-                                     </a>
-                                   )}
-                                 </div>
-                               </div>
-                             </div>
-                           </div>
-                         </div>
-                       );
-                     })}
-                   </div>
-                 </div>
-               )}
-
-               {selectedContextArticles.length > 0 && (
-                 <div style={{ marginBottom: 16 }}>
-                   <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 'bold' }}>
-                     Selected Articles ({selectedContextArticles.length}/3):
-                   </h4>
-                   <div style={{ marginBottom: 16 }}>
-                     {selectedContextArticles.map((article, index) => (
-                       <div key={`${article.url}-${index}`} style={{ 
-                         fontSize: 13, 
-                         color: '#6b7280', 
-                         backgroundColor: '#f3f4f6', 
-                         padding: 8, 
-                         borderRadius: 4,
-                         marginBottom: 4
-                       }}>
-                         {article.headline}
-                       </div>
-                     ))}
-                   </div>
-                   
-                   <button
-                     onClick={addMultipleContextToArticle}
-                     disabled={isAddingMultipleContext}
-                     style={{ 
-                       width: '100%',
-                       padding: '12px 16px', 
-                       background: isAddingMultipleContext ? '#6b7280' : '#059669', 
-                       color: 'white', 
-                       border: 'none', 
-                       borderRadius: 4,
-                       fontSize: 14,
-                       cursor: isAddingMultipleContext ? 'not-allowed' : 'pointer'
-                     }}
-                   >
-                     {isAddingMultipleContext ? 'Adding Context...' : `Add ${selectedContextArticles.length} Article${selectedContextArticles.length > 1 ? 's' : ''} as Context`}
-                   </button>
-                 </div>
-               )}
-                           </div>
+               <span style={{ fontSize: '18px' }}>
+                 {articleProvider.provider === 'gemini' ? '🤖' : '⚡'}
+               </span>
+               <span>
+                 Generated with <strong>{articleProvider.provider.toUpperCase()}</strong> ({articleProvider.model})
+               </span>
+             </div>
+           )}
+           {/* Enhanced Context Form - Using the component with URL support */}
+           {showContextSearch && (
+             <div style={{ marginBottom: 20 }}>
+               <EnhancedContextForm
+                 currentArticle={article}
+                 onContextAdded={(updatedArticle) => {
+                   setArticle(updatedArticle);
+                   setShowContextSearch(false);
+                   setContextSearchTerm('');
+                   setContextSearchResults([]);
+                   setSelectedContextArticles([]);
+                 }}
+                 onError={(error) => {
+                   setContextError(error);
+                 }}
+               />
+               <button
+                 onClick={() => setShowContextSearch(false)}
+                 style={{ 
+                   marginTop: 12,
+                   padding: '8px 16px', 
+                   background: '#6b7280', 
+                   color: 'white', 
+                   border: 'none', 
+                   borderRadius: 4,
+                   fontSize: 14,
+                   cursor: 'pointer'
+                 }}
+               >
+                 Cancel
+               </button>
+             </div>
             )}
 
             {/* Lead Hyperlink Search Interface */}

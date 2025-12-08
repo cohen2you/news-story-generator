@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { aiProvider } from '@/lib/aiProvider';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,9 +23,12 @@ export async function POST(request: NextRequest) {
     console.log('Prompt length:', prompt.length);
     console.log('Current article length:', currentArticle.length);
     
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o';
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 5000;
+    
+    const response = await aiProvider.generateCompletion(
+      [
         {
           role: 'system',
           content: 'You are an expert financial journalist and editor with exceptional skills in rewriting content to avoid plagiarism while maintaining accuracy and readability. You excel at finding creative alternatives to common phrases and restructuring sentences to sound completely different while preserving all factual information. CRITICAL JOURNALISTIC INTEGRITY RULES: 1) You must NEVER modify, remove, or change any existing direct quotes (text within quotation marks) - they must be preserved exactly as they are. 2) You must NEVER create new quotes or add quotation marks to text that was not already quoted. 3) You must NEVER fabricate quotes or attribute words to people that they did not actually say.'
@@ -39,11 +38,14 @@ export async function POST(request: NextRequest) {
           content: prompt
         }
       ],
-      temperature: 0.3, // Low temperature for minimal, conservative changes
-      max_tokens: 5000,
-    });
+      {
+        model,
+        maxTokens,
+        temperature: 0.3, // Low temperature for minimal, conservative changes
+      }
+    );
 
-    let rewordedArticle = completion.choices[0].message.content?.trim();
+    let rewordedArticle = response.content.trim();
     
     if (!rewordedArticle) {
       console.error('No reworded article returned from OpenAI');

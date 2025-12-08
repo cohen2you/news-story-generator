@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { MODEL_CONFIG, generateTopicUrl, shouldLinkToTopic } from '../../../../lib/api';
+import { aiProvider } from '@/lib/aiProvider';
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const BENZINGA_API_KEY = process.env.BENZINGA_API_KEY!;
 const BZ_NEWS_URL = 'https://api.benzinga.com/api/v2/news';
 const MODEL = 'gpt-4o';
@@ -235,6 +234,22 @@ YOU MUST USE THIS INFORMATION IN YOUR ARTICLE.
 CRITICAL QUOTE REQUIREMENT: 
 You MUST include at least one direct quote from the source material. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY and takes priority over other instructions. If no quotes exist in the source, you must still include at least one direct quote from the person being discussed.
 
+**BENZINGA NEWS STYLE - MANDATORY:**
+Write the story in a tight, data-driven Benzinga news style. Follow these rules:
+
+**STRUCTURE - Keep it clean and linear:**
+Lead → Confirmation + Sources → Market Context → Operational Drivers → Forward-Looking Statements.
+
+**CRITICAL CONTENT RULES:**
+- Do NOT repeat facts, themes, or quotes anywhere in the story. Each piece of information should appear only once.
+- Do NOT broaden the narrative beyond the core topic. Avoid side tangents (e.g., unrelated industry shifts, consumer deals, secondary partnerships) unless they directly support the valuation or market impact.
+- Keep paragraphs short and focused. Each paragraph should deliver ONE idea only.
+- Use specific financial details, metrics, subscriber counts, revenue figures, contract information, or valuation numbers to ground the story. Avoid vague statements.
+- Avoid generic or motivational framing. Do NOT restate the same point in different wording.
+- Do NOT over-explain or add background unrelated to the core valuation/IPO/news story.
+- Maintain a crisp, newsroom tone — fast pacing, clean transitions, no filler.
+- No narrative drift. If a fact cannot be tied directly to valuation, market relevance, or growth engines, exclude it.
+
 Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release, news article, or analyst note text as your main source${ticker && ticker.trim() !== '' ? `, but focus only on information relevant to ${ticker}` : ''}. Ignore other tickers or companies mentioned in the source text.
 
 IMPORTANT: If the source text appears to be an analyst note (contains analyst names, firm names, ratings, price targets, or financial analysis), prioritize extracting and using the specific analyst insights, forecasts, and reasoning from the note rather than generic analyst summary data. 
@@ -303,6 +318,7 @@ ${includeSubheads && subheadTexts && subheadTexts.length > 0 ? `
   - Each subhead must cover at least 2 paragraphs of content - do not place subheads too close together.
   - Format each subhead as a standalone line with proper spacing before and after.
   - Do not place subheads in the lead paragraph or immediately after the lead paragraph.
+  - Subheads should reflect factual sections (e.g., "IPO Timing," "Operational Drivers," "Market Context") - not generic topics.
 ` : ''}
 
 ${relatedArticles && relatedArticles.length > 0 ? `
@@ -344,6 +360,14 @@ Examples of what to avoid:
 - "emphasized that" → "noted" or "said"
 - "encounter volatility" → "face ups and downs" or "see price swings"
 
+**BENZINGA STYLE ENFORCEMENT:**
+- Maintain a crisp, newsroom tone with fast pacing and clean transitions
+- No filler words or unnecessary explanations
+- Each sentence must advance the story - no repetition or restatement
+- Focus on data, metrics, and specific financial details
+- If information doesn't directly relate to valuation, market impact, or growth drivers, exclude it
+- Keep the narrative tight and focused on the core topic
+
 NOTE: Hyperlinks will be added separately using the "Add Lead Hyperlink" feature for better control and relevance.
 
 Keep the tone neutral and informative, suitable for a financial news audience. Do not include speculation or personal opinion. 
@@ -375,8 +399,20 @@ Write the article now.`;
 
 export async function POST(req: Request) {
   try {
-    const { ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, inputMode = 'news' } = await req.json();
+    const requestBody = await req.json();
+    const { ticker, sourceText, analystSummary, priceSummary, priceActionDay, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, inputMode = 'news', provider: requestedProvider } = requestBody;
     if (!sourceText) return NextResponse.json({ error: 'Source text is required.' }, { status: 400 });
+    
+    console.log(`\n🔍 PROVIDER DEBUG IN API:`);
+    console.log(`   - Request body has 'provider' key:`, 'provider' in requestBody);
+    console.log(`   - Provider value received: "${requestedProvider}"`);
+    console.log(`   - Provider type: ${typeof requestedProvider}`);
+    console.log(`   - Is 'gemini'?: ${requestedProvider === 'gemini'}`);
+    console.log(`   - Is 'openai'?: ${requestedProvider === 'openai'}`);
+    console.log(`   - Current singleton provider: ${aiProvider.getCurrentProvider()}`);
+    
+    console.log(`\n🔍 Provider request received: ${requestedProvider || 'not provided'}`);
+    console.log(`🔍 Current provider in singleton: ${aiProvider.getCurrentProvider()}`);
     // Ticker is optional - no validation required
     console.log('Prompt priceSummary:', priceSummary); // Log the priceSummary
     console.log('Source text length:', sourceText.length);
@@ -394,33 +430,68 @@ export async function POST(req: Request) {
     console.log('Related articles in prompt:', relatedArticles.length);
     console.log('First related article:', relatedArticles[0]?.headline);
     console.log('Prompt preview (first 500 chars):', prompt.substring(0, 500));
-    const res = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a professional financial journalist for Benzinga. You MUST include at least one direct quote from the source material in every article you write. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY for journalistic integrity and credibility.'
-          },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.5,
-        max_tokens: 900,
-      }),
-    });
-    if (!res.ok) {
-      const raw = await res.text();
-      return NextResponse.json({ error: `OpenAI error: ${raw}` }, { status: 500 });
-    }
-    const data = await res.json();
-    let story = data.choices[0].message.content.trim();
     
-    console.log('Generated story preview:', story.substring(0, 500));
+    // Use requested provider if provided, otherwise get current provider
+    let currentProvider: 'openai' | 'gemini';
+    if (requestedProvider && (requestedProvider === 'openai' || requestedProvider === 'gemini')) {
+      // Set the provider if it's different from current
+      const current = aiProvider.getCurrentProvider();
+      if (current !== requestedProvider) {
+        await aiProvider.setProvider(requestedProvider);
+      }
+      currentProvider = requestedProvider;
+    } else {
+      currentProvider = aiProvider.getCurrentProvider();
+    }
+    
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 900;
+    
+    console.log(`\n📊 AI PROVIDER for story generation:`);
+    console.log(`   - Provider: ${currentProvider}`);
+    console.log(`   - Model: ${model}`);
+    console.log(`   - Max Tokens: ${maxTokens}\n`);
+    
+    const response = await aiProvider.generateCompletion(
+      [
+        {
+          role: 'system',
+          content: 'You are a professional financial journalist for Benzinga. You MUST include at least one direct quote from the source material in every article you write. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY for journalistic integrity and credibility.'
+        },
+        { role: 'user', content: prompt }
+      ],
+      {
+        model,
+        maxTokens,
+        temperature: 0.5,
+      }
+    );
+    
+    let story = response.content.trim();
+    
+    console.log('\n📝 STORY GENERATION DEBUG:');
+    console.log(`   - Response provider: ${response.provider}`);
+    console.log(`   - Response content length: ${response.content ? response.content.length : 0}`);
+    console.log(`   - Response content type: ${typeof response.content}`);
+    console.log(`   - Story after trim length: ${story.length}`);
+    console.log(`   - Story preview (first 500 chars):`, story.substring(0, 500));
+    if (story.length > 200) {
+      console.log(`   - Story preview (last 200 chars):`, story.substring(Math.max(0, story.length - 200)));
+    }
+    console.log(`   - Is story empty?: ${story.length === 0}`);
+    
+    if (story.length === 0) {
+      console.error('❌ ERROR: Story content is empty!');
+      console.error('Response object keys:', Object.keys(response));
+      console.error('Response content:', response.content);
+      console.error('Response content (stringified):', JSON.stringify(response.content));
+      return NextResponse.json({ 
+        error: 'Story generation returned empty content. Please try again or check the source material.',
+        provider: response.provider,
+        model: model
+      }, { status: 500 });
+    }
+    
     console.log('Source URL provided:', sourceUrl);
     
     // Note: Hyperlinks are now handled separately via the "Add Lead Hyperlink" feature
@@ -529,7 +600,12 @@ export async function POST(req: Request) {
     }
     
     console.log('Final story preview:', story.substring(0, 500));
-    return NextResponse.json({ story });
+    console.log(`✅ Story generated successfully using ${currentProvider.toUpperCase()} (${model})`);
+    return NextResponse.json({ 
+      story,
+      provider: currentProvider,
+      model: model
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to generate story.' }, { status: 500 });
   }

@@ -1,36 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getPrimaryPrompt } from '../../../../lib/prompts/primary';
 import { MODEL_CONFIG } from '../../../../lib/api';
+import { aiProvider } from '@/lib/aiProvider';
 
 const MODEL = 'gpt-4o';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-
-// Helper to call OpenAI Chat Completion API
-async function callOpenAI(prompt: string) {
-  const res = await fetch(OPENAI_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.5,
-      max_tokens: 800,
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error('OpenAI error:', text);
-    throw new Error(`OpenAI API error: ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.choices[0].message.content.trim();
-}
 
 export async function POST(req: Request) {
   try {
@@ -43,7 +16,20 @@ export async function POST(req: Request) {
     // Construct a prompt - adjust this as you want
     const prompt = `Write a concise Lead and What Happened section based ONLY on this article content:\n\n${articleText}`;
 
-    const generatedText = await callOpenAI(prompt);
+    const currentProvider = aiProvider.getCurrentProvider();
+    const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 800;
+    
+    const response = await aiProvider.generateCompletion(
+      [{ role: 'user', content: prompt }],
+      {
+        model,
+        maxTokens,
+        temperature: 0.5,
+      }
+    );
+
+    const generatedText = response.content.trim();
 
     return NextResponse.json({ result: generatedText });
   } catch (error: any) {

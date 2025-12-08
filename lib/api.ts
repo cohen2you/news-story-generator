@@ -17,36 +17,25 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o';
 
 export async function callOpenAI(prompt: string) {
-  if (!OPENAI_API_KEY) {
-    console.error('OPENAI_API_KEY not set!');
-    throw new Error('Missing OpenAI API key');
-  }
+  const { aiProvider } = await import('./aiProvider');
+  
+  const currentProvider = aiProvider.getCurrentProvider();
+  const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+  const maxTokens = currentProvider === 'gemini' ? 8192 : 800;
 
-  console.log('Calling OpenAI with prompt:', prompt.substring(0, 200));
+  console.log(`Calling ${currentProvider} with prompt:`, prompt.substring(0, 200));
 
-  const res = await fetch(OPENAI_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: 'user', content: prompt }],
+  const response = await aiProvider.generateCompletion(
+    [{ role: 'user', content: prompt }],
+    {
+      model,
+      maxTokens,
       temperature: 0.5,
-      max_tokens: 800,
-    }),
-  });
+    }
+  );
 
-  if (!res.ok) {
-    const raw = await res.text();
-    console.error('OpenAI raw error:', raw);
-    throw new Error(`OpenAI failed with status ${res.status}`);
-  }
-
-  const data = await res.json();
-  console.log('OpenAI response received');
-  return data.choices[0].message.content.trim();
+  console.log(`${currentProvider} response received`);
+  return response.content.trim();
 }
 
 export async function generateFinalStory({

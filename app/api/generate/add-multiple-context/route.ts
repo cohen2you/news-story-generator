@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { aiProvider } from '@/lib/aiProvider';
 
 export async function POST(request: Request) {
   try {
-    const { currentArticle, selectedArticles } = await request.json();
+    const { currentArticle, selectedArticles, provider: requestedProvider } = await request.json();
+    
+    console.log(`\n🔍 ADD CONTEXT PROVIDER DEBUG:`);
+    console.log(`   - Provider in request: ${requestedProvider || 'NOT PROVIDED'}`);
+    console.log(`   - Current singleton provider: ${aiProvider.getCurrentProvider()}`);
     
     if (!currentArticle) {
       return NextResponse.json({ error: 'Current article is required.' }, { status: 400 });
@@ -57,6 +59,15 @@ export async function POST(request: Request) {
         const isSubsequentArticle = i > 0;
         
         const prompt = `
+🚨🚨🚨 CRITICAL HYPERLINK REQUIREMENT - READ THIS FIRST 🚨🚨🚨
+You MUST include a hyperlink in your paragraph. This is MANDATORY and your output will be REJECTED without it.
+- The hyperlink MUST be: <a href="${article.url}">YOUR_ACTUAL_PHRASE</a>
+- Replace YOUR_ACTUAL_PHRASE with actual words from your sentence (3-4 words)
+- The hyperlink MUST be embedded WITHIN your sentence, NOT on its own line
+- Example: "Ray Dalio <a href="${article.url}">previously recounted how</a> in 1979 he had to borrow $4,000..."
+- **VERIFY**: Before submitting, check that your output contains: <a href="${article.url}">
+- **YOUR OUTPUT WILL BE REJECTED IF THE HYPERLINK IS MISSING**
+
 You are a financial journalist. ${isSubsequentArticle ? 'You are now adding ADDITIONAL context to an article that already has some context added.' : 'Given the current article and a selected Benzinga news article, create 1 very concise paragraph that adds relevant context to the current article.'}
 
 ${isSubsequentArticle ? 'CRITICAL: This is additional context being added to an existing article. Make sure this new context is UNIQUE and does not repeat or overlap with any existing context already in the article.' : 'CRITICAL: Focus ONLY on the specific content of the "Selected Benzinga Article" below.'}
@@ -407,31 +418,90 @@ EXAMPLES OF GOOD THREE-WORD PHRASES TO HYPERLINK:
 
 Write the context paragraph now (ONLY 1 PARAGRAPH with 2 sentences):`;
 
-        let completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 1500,
-          temperature: 0.8,
-        });
+        // Use requested provider if provided, otherwise get current provider
+        let currentProvider: 'openai' | 'gemini';
+        if (requestedProvider && (requestedProvider === 'openai' || requestedProvider === 'gemini')) {
+          // Set the provider if it's different from current
+          const current = aiProvider.getCurrentProvider();
+          if (current !== requestedProvider) {
+            await aiProvider.setProvider(requestedProvider);
+          }
+          currentProvider = requestedProvider;
+        } else {
+          currentProvider = aiProvider.getCurrentProvider();
+        }
+        
+        const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+        const maxTokens = currentProvider === 'gemini' ? 8192 : 1500;
+        
+        console.log(`📊 Using provider for context article ${i + 1}/${selectedArticles.length}: ${currentProvider} (${model})`);
+        
+        // For Gemini, add extra emphasis on HTML formatting
+        let finalPrompt = prompt;
+        if (currentProvider === 'gemini') {
+          finalPrompt = `${prompt}
 
-        let contextText = completion.choices[0].message?.content?.trim() || '';
+**GEMINI-SPECIFIC INSTRUCTION:**
+You are generating HTML content. The hyperlink MUST be in proper HTML format: <a href="${article.url}">text</a>
+Do NOT use markdown format [text](url). Do NOT skip the hyperlink. The hyperlink is REQUIRED and your output will be rejected without it.`;
+        }
+        
+        let response = await aiProvider.generateCompletion(
+          [{ role: 'user', content: finalPrompt }],
+          {
+            model,
+            maxTokens,
+            temperature: currentProvider === 'gemini' ? 0.7 : 0.8, // Slightly lower temp for Gemini for more consistent output
+          }
+        );
+
+        let contextText = response.content.trim();
+        
+        console.log(`\n🔍 HYPERLINK CHECK for article ${i + 1}/${selectedArticles.length}:`);
+        console.log(`   - Provider: ${currentProvider}`);
+        console.log(`   - Context text length: ${contextText.length}`);
+        console.log(`   - Looking for: <a href="${article.url}">`);
+        console.log(`   - Contains hyperlink?: ${contextText.includes(`<a href="${article.url}">`)}`);
+        console.log(`   - Contains any <a href?: ${contextText.includes('<a href=')}`);
+        if (contextText.includes('<a href=')) {
+          const allLinks = contextText.match(/<a href="([^"]+)">/g);
+          console.log(`   - Found hyperlinks:`, allLinks);
+        }
+        console.log(`   - First 300 chars:`, contextText.substring(0, 300));
         
         // If hyperlink is missing, retry with an even more explicit prompt
         if (contextText && !contextText.includes(`<a href="${article.url}">`)) {
           console.warn(`Hyperlink missing in first attempt, retrying with explicit instruction...`);
-          const retryPrompt = `${prompt}
+          const retryPrompt = `🚨🚨🚨 CRITICAL: YOUR PREVIOUS RESPONSE WAS REJECTED BECAUSE IT WAS MISSING THE REQUIRED HYPERLINK 🚨🚨🚨
 
-**CRITICAL RETRY INSTRUCTION**: Your previous response was missing the required hyperlink. You MUST include this exact hyperlink in your output: <a href="${article.url}">YOUR_PHRASE</a>
-Replace YOUR_PHRASE with actual words from your sentence. Do not submit without the hyperlink.`;
+You MUST include this exact hyperlink in your output: <a href="${article.url}">YOUR_ACTUAL_PHRASE</a>
+
+Replace YOUR_ACTUAL_PHRASE with actual words from your sentence (3-4 words).
+
+Example: If your sentence is "Ray Dalio previously recounted how in 1979 he had to borrow $4,000 from his dad", you could hyperlink it like:
+"Ray Dalio <a href="${article.url}">previously recounted how</a> in 1979 he had to borrow $4,000 from his dad"
+
+**DO NOT SUBMIT YOUR RESPONSE WITHOUT THE HYPERLINK. YOUR OUTPUT WILL BE REJECTED AGAIN.**
+
+${currentProvider === 'gemini' ? `
+**GEMINI-SPECIFIC: You MUST output HTML format, not markdown. The hyperlink must be: <a href="${article.url}">text</a> NOT [text](url).**` : ''}
+
+Now, here is the original prompt:
+
+${prompt}
+
+**REMEMBER: You MUST include <a href="${article.url}"> in your output. Check your response before submitting.**`;
           
-          completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: retryPrompt }],
-            max_tokens: 1500,
-            temperature: 0.7, // Slightly lower temperature for more focused output
-          });
+          response = await aiProvider.generateCompletion(
+            [{ role: 'user', content: retryPrompt }],
+            {
+              model,
+              maxTokens,
+              temperature: 0.7, // Slightly lower temperature for more focused output
+            }
+          );
           
-          contextText = completion.choices[0].message?.content?.trim() || '';
+          contextText = response.content.trim();
           
           if (contextText && !contextText.includes(`<a href="${article.url}">`)) {
             console.error(`Hyperlink still missing after retry. Generated text: ${contextText.substring(0, 300)}`);
@@ -440,14 +510,10 @@ Replace YOUR_PHRASE with actual words from your sentence. Do not submit without 
           }
         }
         
-        // Log token usage for this context generation
-        if (completion.usage) {
-          console.log(`\n📊 TOKEN USAGE for context article ${i + 1}/${selectedArticles.length}:`);
-          console.log(`   - Prompt tokens: ${completion.usage.prompt_tokens}`);
-          console.log(`   - Completion tokens: ${completion.usage.completion_tokens}`);
-          console.log(`   - Total tokens: ${completion.usage.total_tokens}`);
-          console.log(`   - Model: gpt-4o-mini\n`);
-        }
+        // Log provider info
+        console.log(`\n📊 AI PROVIDER for context article ${i + 1}/${selectedArticles.length}:`);
+        console.log(`   - Provider: ${response.provider}`);
+        console.log(`   - Model: ${model}\n`);
         
         if (contextText) {
           console.log(`Generated context for "${article.headline}":`, contextText.substring(0, 200) + '...');
@@ -486,22 +552,73 @@ Replace YOUR_PHRASE with actual words from your sentence. Do not submit without 
           
           // Validate that hyperlink was generated
           if (!formattedContext.includes(`<a href="${article.url}">`)) {
-            console.error(`CRITICAL ERROR: No hyperlink found in context for article "${article.headline}"`);
-            console.error(`Expected URL: ${article.url}`);
-            console.error(`Looking for pattern: <a href="${article.url}">`);
-            console.error('Generated context text:', formattedContext);
-            console.error('Context text length:', formattedContext.length);
+            console.error(`\n❌ CRITICAL ERROR: No hyperlink found in context for article "${article.headline}"`);
+            console.error(`   - Provider used: ${currentProvider}`);
+            console.error(`   - Expected URL: ${article.url}`);
+            console.error(`   - Looking for pattern: <a href="${article.url}">`);
+            console.error(`   - Generated context text length: ${formattedContext.length}`);
+            console.error(`   - Generated context preview: ${formattedContext.substring(0, 500)}`);
+            
             // Check if there's any hyperlink at all
             const hasAnyHyperlink = formattedContext.includes('<a href=');
-            console.error('Has any hyperlink:', hasAnyHyperlink);
+            console.error(`   - Has any hyperlink: ${hasAnyHyperlink}`);
             if (hasAnyHyperlink) {
               // Extract any hyperlinks that were generated
               const hyperlinkMatches = formattedContext.match(/<a href="([^"]+)">/g);
-              console.error('Found hyperlinks:', hyperlinkMatches);
+              console.error(`   - Found hyperlinks:`, hyperlinkMatches);
             }
-            // Skip this context if no hyperlink - it's invalid
-            console.error('Skipping this context article due to missing hyperlink');
-            continue;
+            
+            // For Gemini, try one more time with even more explicit instructions
+            if (currentProvider === 'gemini') {
+              console.log(`\n🔄 GEMINI: Attempting final retry with ultra-explicit HTML instructions...`);
+              const finalRetryPrompt = `You MUST output HTML with a hyperlink. Here is the EXACT format required:
+
+<p>Your sentence text here with <a href="${article.url}">three word phrase</a> continuing the sentence.</p>
+
+The hyperlink MUST be in HTML format: <a href="${article.url}">text</a>
+Do NOT use markdown format like [text](url). Do NOT skip the hyperlink.
+
+Original prompt:
+${prompt}`;
+              
+              try {
+                const finalResponse = await aiProvider.generateCompletion(
+                  [{ role: 'user', content: finalRetryPrompt }],
+                  {
+                    model,
+                    maxTokens,
+                    temperature: 0.5, // Even lower temperature for more deterministic output
+                  }
+                );
+                
+                const finalText = finalResponse.content.trim();
+                console.log(`   - Final retry text length: ${finalText.length}`);
+                console.log(`   - Final retry contains hyperlink?: ${finalText.includes(`<a href="${article.url}">`)}`);
+                
+                if (finalText && finalText.includes(`<a href="${article.url}">`)) {
+                  console.log(`✅ GEMINI: Hyperlink found in final retry!`);
+                  formattedContext = finalText;
+                  
+                  // Re-apply formatting fixes
+                  formattedContext = formattedContext
+                    .replace(/\n\n+/g, '\n\n')
+                    .replace(/\n([^<])/g, '\n\n$1')
+                    .replace(/([^>])\n\n([^<])/g, '$1\n\n$2')
+                    .replace(/<p>\s*<\/p>/g, '')
+                    .replace(/(<p>.*?<\/p>)\s*(<p>.*?<\/p>)/g, '$1\n\n$2');
+                } else {
+                  console.error(`❌ GEMINI: Still no hyperlink after final retry`);
+                }
+              } catch (finalError) {
+                console.error(`❌ GEMINI: Final retry failed:`, finalError);
+              }
+            }
+            
+            // Final check - if still no hyperlink, skip
+            if (!formattedContext.includes(`<a href="${article.url}">`)) {
+              console.error('Skipping this context article due to missing hyperlink');
+              continue;
+            }
           }
           
           // Add this context to the working article immediately
@@ -582,14 +699,27 @@ Examples of good context subheads:
 
 Create 1 subhead for the context section:`;
 
-      const contextSubheadCompletion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: contextSubheadPrompt }],
-        max_tokens: 50,
-        temperature: 0.7,
-      });
+      // Use the same provider as the context generation
+      let subheadProvider: 'openai' | 'gemini';
+      if (requestedProvider && (requestedProvider === 'openai' || requestedProvider === 'gemini')) {
+        subheadProvider = requestedProvider;
+      } else {
+        subheadProvider = aiProvider.getCurrentProvider();
+      }
+      
+      const model = subheadProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+      const maxTokens = subheadProvider === 'gemini' ? 8192 : 50;
+      
+      const contextSubheadResponse = await aiProvider.generateCompletion(
+        [{ role: 'user', content: contextSubheadPrompt }],
+        {
+          model,
+          maxTokens,
+          temperature: 0.7,
+        }
+      );
 
-      contextSubhead = contextSubheadCompletion.choices[0].message?.content?.trim() || '';
+      contextSubhead = contextSubheadResponse.content.trim();
       if (contextSubhead) {
         contextSubhead = contextSubhead.replace(/\*\*/g, '').replace(/^##\s*/, '').replace(/^["']|["']$/g, '').trim();
       }
