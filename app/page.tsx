@@ -34,7 +34,7 @@ export default function PRStoryGeneratorPage() {
   const [subheadsError, setSubheadsError] = useState('');
   const [copiedSubheads, setCopiedSubheads] = useState(false);
   const [includeCTA, setIncludeCTA] = useState(false);
-  const [includeSubheads, setIncludeSubheads] = useState(false);
+  const [includeSubheads, setIncludeSubheads] = useState(true); // Default to true (subheads included by default)
   const [loadingReword, setLoadingReword] = useState(false);
   const [showCopyleaksModal, setShowCopyleaksModal] = useState(false);
   const [sourceCopied, setSourceCopied] = useState(false);
@@ -434,6 +434,9 @@ export default function PRStoryGeneratorPage() {
              
              console.log(`📌 Final provider decision: ${currentProvider} (source: ${providerSource})`);
              console.log(`📤 Will send provider "${currentProvider}" in request body`);
+      
+             // Determine which route to use based on inputMode
+             const route = inputMode === 'pr' ? '/api/generate/pr-story' : '/api/generate/story';
              
              const requestBody = {
            ticker: ticker || '',
@@ -451,19 +454,20 @@ export default function PRStoryGeneratorPage() {
            ctaText,
            includeSubheads,
            subheadTexts,
-           inputMode: inputMode,
            provider: currentProvider, // Include provider in request
        };
       
       console.log('📤 Sending to story generation:', { ...requestBody, sourceText: `[${requestBody.sourceText.length} chars]` }); // Debug log
       console.log('📤 Provider being sent:', requestBody.provider);
+      console.log('📤 Route being used:', route);
+      console.log('📤 Input mode:', inputMode);
       console.log('Source text length:', sourceText.length); // Debug log
       console.log('Source text preview:', sourceText.substring(0, 200)); // Debug log
       console.log('Source URL being sent:', sourceUrl); // Debug log
       console.log('Source URL type:', typeof sourceUrl); // Debug log
       console.log('Source URL length:', sourceUrl?.length); // Debug log
       
-      const res = await fetch('/api/generate/story', {
+      const res = await fetch(route, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -633,7 +637,7 @@ export default function PRStoryGeneratorPage() {
     setSubheadsError('');
     setCopiedSubheads(false);
     setIncludeCTA(false);
-    setIncludeSubheads(false);
+    setIncludeSubheads(true); // Default to true (subheads included by default)
     setLoadingContext(false);
     setContextError('');
     setPreviouslyUsedContextUrls([]);
@@ -1384,11 +1388,11 @@ export default function PRStoryGeneratorPage() {
             <label style={{ display: 'flex', alignItems: 'center' }}>
               <input
                 type="checkbox"
-                checked={includeSubheads}
-                onChange={(e) => setIncludeSubheads(e.target.checked)}
+                checked={!includeSubheads}
+                onChange={(e) => setIncludeSubheads(!e.target.checked)}
                 style={{ marginRight: 6 }}
               />
-              Include Subheads
+              Don't Include Subheads
             </label>
           </div>
                      <button
@@ -1417,7 +1421,7 @@ export default function PRStoryGeneratorPage() {
          <div style={{ marginBottom: 20 }}>
            {/* AI Provider Indicator */}
            {articleProvider && (
-             <div style={{
+             <div style={{ 
                marginBottom: '16px',
                padding: '10px 16px',
                background: articleProvider.provider === 'gemini' 
@@ -1456,22 +1460,22 @@ export default function PRStoryGeneratorPage() {
                    setContextError(error);
                  }}
                />
-               <button
-                 onClick={() => setShowContextSearch(false)}
-                 style={{ 
+                   <button
+                     onClick={() => setShowContextSearch(false)}
+                     style={{ 
                    marginTop: 12,
-                   padding: '8px 16px', 
-                   background: '#6b7280', 
-                   color: 'white', 
-                   border: 'none', 
-                   borderRadius: 4,
-                   fontSize: 14,
-                   cursor: 'pointer'
-                 }}
-               >
-                 Cancel
-               </button>
-             </div>
+                       padding: '8px 16px', 
+                       background: '#6b7280', 
+                       color: 'white', 
+                       border: 'none', 
+                       borderRadius: 4,
+                       fontSize: 14,
+                       cursor: 'pointer'
+                     }}
+                   >
+                     Cancel
+                   </button>
+                           </div>
             )}
 
             {/* Lead Hyperlink Search Interface */}

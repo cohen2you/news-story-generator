@@ -9,10 +9,21 @@ export function AIProviderSelector() {
 
   useEffect(() => {
     fetch('/api/ai-provider')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status}`);
+        }
+        return res.json();
+      })
       .then(data => {
-        setProvider(data.provider);
-        setAvailable({ openai: data.hasOpenAI, gemini: data.hasGemini });
+        setProvider(data.provider || 'openai');
+        setAvailable({ openai: data.hasOpenAI || false, gemini: data.hasGemini || false });
+      })
+      .catch(error => {
+        console.error('Failed to fetch AI provider:', error);
+        // Set defaults on error
+        setProvider('openai');
+        setAvailable({ openai: true, gemini: false });
       });
   }, []);
 

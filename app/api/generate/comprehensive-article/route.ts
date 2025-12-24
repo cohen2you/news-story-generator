@@ -305,28 +305,37 @@ function buildComprehensivePrompt(
   
   const relatedArticlesSection = relatedArticles && relatedArticles.length > 0 ? `\n- After the second paragraph of additional content (not the lead paragraph), insert the "Also Read:" section with this exact format:\n  Also Read: <a href="${relatedArticles[0].url}">${relatedArticles[0].headline}</a>` : '';
   
-  return `You are a professional financial news writer for Benzinga. Create a comprehensive financial news article based on the provided source material.
+  return `You are a professional financial news writer for Benzinga. Transform the provided press release (PR) into a concise, tight Benzinga-style financial news article.
+
+🚨 CRITICAL LENGTH REQUIREMENT - STRICTLY ENFORCE:
+- MAXIMUM length: 400 words (STRICT UPPER LIMIT - do not exceed)
+- Target length: 300-400 words (CONCISE, not comprehensive)
+- Every sentence must add value - no filler or repetition
+- Get to the point quickly and efficiently
+- If you exceed 400 words, your response will be rejected
+- Count your words and stay within the limit
 
 CRITICAL QUOTE REQUIREMENT: 
 You MUST include at least one direct quote from the source material. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY and takes priority over other instructions.
 
-TASK: Transform the source article into a financial news piece that:
-1. Reports the key news event from the source (start with the news, not market data)
+TASK: Transform the PR into a concise financial news piece that:
+1. Reports the key news event from the PR (start with the news, not market data)
 2. CRITICAL: Avoids plagiarism by completely rewriting all content in original language - do not copy 4+ consecutive words from the source
 3. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes for better authenticity and credibility. Look for quotes that contain quotation marks in the source text and use them exactly as written.
-4. Adds intelligent market context based on the story's implications
-5. Provides relevant financial analysis and broader market impact
+4. Adds brief, relevant market context only if it directly relates to the story
+5. Focuses on the core news - no tangents or unnecessary background
 
 CRITICAL: The article MUST start with the news story, NOT with ticker movements or market data. Do NOT begin with phrases like "[TICKER] traded lower" or "[TICKER] is slipping." Start with the actual news event.
 
-STRUCTURE:
-- Headline: Create an engaging, news-focused headline
-- Lead: Start with the key news event, then add market context
-- Body: Expand on the news with quotes, analysis, and broader implications
-- Market Context: Include relevant market data and broader financial implications
-- Related News: Mention other relevant market developments
+STRUCTURE (CONCISE - MAX 400 WORDS TOTAL):
+- Headline: Create an engaging, news-focused headline (8-12 words)
+- Lead Paragraph (50-80 words): Start with the key news event, include a quote if available, add brief context
+- Body (150-200 words total, 2-3 short paragraphs): Expand on the news with quotes, key details, and brief implications
+- Brief Market Context (50-80 words, 1 paragraph): Only if highly relevant to the story
+- Keep it tight - every paragraph must serve a purpose
+- TOTAL WORD COUNT MUST NOT EXCEED 400 WORDS
 
-SOURCE MATERIAL:
+SOURCE MATERIAL (PR):
 ${sourceText}
 
 CONTENT ANALYSIS:
@@ -341,10 +350,10 @@ MARKET CONTEXT:
 - Available Market Data: ${JSON.stringify(marketData, null, 2)}
 - Related Articles: ${JSON.stringify(relatedArticles.slice(0, 3), null, 2)}${tickerContext}${hyperlinkRule}${ctaSection}${subheadsSection}${relatedArticlesSection}
 
-WRITING GUIDELINES:
+WRITING GUIDELINES (BENZINGA STYLE - CONCISE):
 - START WITH THE NEWS STORY, not market data
 - NEVER begin with ticker movements like "[TICKER] traded lower" or "[TICKER] is slipping"
-- Start with the actual news event from the source material
+- Start with the actual news event from the PR
 - MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes for better authenticity and credibility. Look for text in the source that is already in quotation marks and use those exact quotes.
 - CRITICAL PLAGIARISM PREVENTION: 
   * Do NOT copy 4 or more consecutive words from the source material
@@ -352,27 +361,29 @@ WRITING GUIDELINES:
   * Use synonyms, different phrasing, and alternative sentence constructions
   * Paraphrase all content while maintaining accuracy and meaning
   * EXCEPTION: Direct quotes in quotation marks are allowed and encouraged - use them exactly as written
-- Include market context only after establishing the news event
-- Reference specific stocks, indices, or market movements only if highly relevant
-- Keep paragraphs short (2-3 sentences max)
+- Keep paragraphs SHORT (1-2 sentences max, rarely 3 sentences)
 - Use professional, neutral tone suitable for financial news
 - Include specific numbers, percentages, and data points when available
-- Add analysis of broader market impact and investor sentiment
-- Focus on the news story first, then add financial context
+- NO repetition - each fact mentioned once
+- NO filler - every sentence must advance the story
+- NO unnecessary background - focus on the news
+- Brief market context only if directly relevant (keep to 1-2 sentences)
+- Write in a tight, data-driven Benzinga news style
+- Fast pacing, clean transitions, no filler
+- REMEMBER: Maximum 400 words total - be ruthless about cutting unnecessary content
 
 FORMAT:
 - Use HTML tags for formatting (<p>, <strong>, <em>)
 - Include hyperlinks where appropriate
-- Structure with clear sections and subheadings
-- End with a market impact summary
+- Structure with clear sections
 - Use Benzinga-style formatting
+- Keep it concise - aim for 300-500 words total
 
-EXAMPLE STRUCTURE:
-1. News event with direct quotes (e.g., "Federal Reserve Governor Adriana Kugler resigned on Friday...")
-2. Broader implications and analysis
-3. Market context and volatility
-4. Related market developments
-5. Market impact summary
+EXAMPLE STRUCTURE (CONCISE):
+1. Lead: News event with direct quote (1-2 sentences)
+2. Key details and implications (1-2 paragraphs)
+3. Brief market context if relevant (1 paragraph, optional)
+4. Closing statement if needed (1 sentence)
 
 QUOTE INCLUSION EXAMPLES:
 If the source contains: "In 2026 you can expect a variety of Mona products launched into the Chinese and European markets," He said.
@@ -381,7 +392,7 @@ Your article should include: "In 2026 you can expect a variety of Mona products 
 If the source contains: "I think if we have the opportunity then we want to acquire some companies," He said.
 Your article should include: "I think if we have the opportunity then we want to acquire some companies," He said.
 
-CORRECT EXAMPLE LEAD:
+CORRECT EXAMPLE LEAD (CONCISE):
 "Federal Reserve Governor Adriana Kugler resigned on Friday, creating a vacancy on the Federal Reserve's Board of Governors at a pivotal time for monetary policy."
 
 INCORRECT EXAMPLE LEAD:
@@ -394,7 +405,9 @@ BAD (Copied): "Kugler resigned from the Federal Reserve Board months before her 
 GOOD (Original): "The central bank announced that Kugler would return to her academic position at Georgetown University."
 BAD (Copied): "The Federal Reserve announced that Kugler would return to Georgetown University as a professor."
 
-Generate a comprehensive article that prioritizes the news story while adding intelligent financial context.`;
+Generate a CONCISE (300-400 words MAXIMUM), tight Benzinga-style article that transforms the PR into professional financial news. Prioritize the news story, include quotes, and keep it brief and focused.
+
+FINAL REMINDER: Your article MUST be 400 words or less. Count your words before submitting. If you exceed 400 words, cut content to meet the limit.`;
 }
 
 export async function POST(req: Request) {
@@ -403,7 +416,7 @@ export async function POST(req: Request) {
       sourceText, 
       sourceUrl, 
       ticker, 
-      includeMarketData = true,
+      includeMarketData = false,
       includeCTA = false,
       includeSubheads = false,
       scrapeUrl = false
@@ -473,7 +486,8 @@ export async function POST(req: Request) {
     
     const currentProvider = aiProvider.getCurrentProvider();
     const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
-    const maxTokens = currentProvider === 'gemini' ? 8192 : 1500;
+    // Reduced token limits to enforce concise 300-400 word articles
+    const maxTokens = currentProvider === 'gemini' ? 1500 : 600;
     
     const response = await aiProvider.generateCompletion(
       [{ role: 'user', content: prompt }],
