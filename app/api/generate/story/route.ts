@@ -265,7 +265,16 @@ Lead → Confirmation + Sources → Market Context → Operational Drivers → F
 - Maintain a crisp, newsroom tone — fast pacing, clean transitions, no filler.
 - No narrative drift. If a fact cannot be tied directly to valuation, market relevance, or growth engines, exclude it.
 
-Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release, news article, or analyst note text as your main source${ticker && ticker.trim() !== '' ? `, but focus only on information relevant to ${ticker}` : ''}. Ignore other tickers or companies mentioned in the source text.
+Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release, news article, or analyst note text as your main source${ticker && ticker.trim() !== '' ? `. 
+
+CRITICAL COMPANY INCLUSION RULES:
+- PRIMARY FOCUS: ${ticker} is the primary company - lead with this company and make it the main focus of the article
+- OTHER COMPANIES: You MUST include details, quotes, and context from OTHER companies mentioned in the source text (even if they have different tickers)
+- Include specific information about other companies such as: company names, tickers, quotes from their executives, product launches, financial results, partnerships, or strategic moves
+- When other companies are mentioned in the source, include their ticker symbols in the format: Company Name (NYSE: TICKER) or (NASDAQ: TICKER)
+- Use other companies to provide market context, competitive landscape, or industry trends that relate to ${ticker}
+- Do NOT ignore other companies - they provide valuable context and should be included in the article
+- Example: If the source mentions "Doseology Sciences Inc. (CSE:MOOD)" and "Philip Morris International (NYSE:PM)", include their details, quotes, and context in your article` : ''}.
 
 IMPORTANT: If the source text appears to be an analyst note (contains analyst names, firm names, ratings, price targets, or financial analysis), prioritize extracting and using the specific analyst insights, forecasts, and reasoning from the note rather than generic analyst summary data. 
 
@@ -283,9 +292,7 @@ CRITICAL FORMATTING RULES:
 - Use HTML tags for formatting, not markdown
 
 Structure your article as follows:
-- Headline: Write a clear, engaging headline in the style of these examples (do not use bold, asterisks, or markdown headings such as # or ##; the headline should be plain text only):
-  - Federal Reserve Governor Adriana Kugler Resigns: What This Means
-  - Fed Governor Kugler Steps Down: Impact on Interest Rate Policy
+- CRITICAL: Do NOT include a headline in your output. Start directly with the lead paragraph. The headline will be handled separately.
 
 - Lead paragraph: Start with the most important news event or development from the source text. Focus on what happened, not on stock price movement. Use the full company name and ticker in this format: <strong>Company Name</strong> (NYSE: TICKER) if a specific company is involved, or focus on the news event itself if it's broader market news. The company name should be bolded using HTML <strong> tags. Do not use markdown bold (**) or asterisks elsewhere. State what happened and why it matters in exactly 2 concise sentences. CRITICAL: Do NOT include analyst names (like "Samik Chatterjee" or "J.P. Morgan analyst") in the lead paragraph. The lead should focus on the news event itself, not specific analyst details or stock price movements. 
 
@@ -293,12 +300,14 @@ NOTE: Hyperlinks will be added separately using the "Add Lead Hyperlink" feature
 
 CRITICAL LEAD PARAGRAPH RULES:
 - The lead paragraph MUST be exactly 2 concise sentences maximum. Keep it tight and focused. If you have more information, create additional paragraphs.
-- ALWAYS identify the specific day when the news occurred using the day name (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday). 
-- If the source text mentions a specific date, convert it to the day name (e.g., "December 23" becomes "Tuesday" or "Wednesday" depending on the actual day).
+- ALWAYS identify the specific day when the news occurred using ONLY the day name (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday). 
+- If the source text mentions a specific date, convert it to ONLY the day name (e.g., "December 23" becomes "Tuesday" or "Wednesday" depending on the actual day).
+- CRITICAL: When mentioning the day, use ONLY the day name. NEVER include both the day name AND the date together (e.g., "on Tuesday, December 23" is WRONG - use only "on Tuesday").
+- NEVER write "on Tuesday, December 23" or "on Wednesday, Dec 23" - use ONLY the day name: "on Tuesday" or "on Wednesday".
 - If the source mentions both an announcement date and an event date, use the event date (when the actual news happened) for the lead, not the announcement date.
 - If no specific date is mentioned, use the current day name: ${getDayName()}.
 - NEVER use "today", "yesterday", "tomorrow", or "recently" - always specify the actual day name.
-- NEVER use date formats like "December 23" or "Dec 23" - always use the day name instead.
+- NEVER use date formats like "December 23", "Dec 23", or any month/day combination - always use ONLY the day name instead.
 - Do not force price movement timing if the news is not about stock price changes.
 
 - NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
@@ -307,9 +316,18 @@ CRITICAL LEAD PARAGRAPH RULES:
   * This applies to all people mentioned in the article, including politicians, executives, analysts, etc.
   * Exception: Analyst names in analyst notes should follow the specific analyst note formatting rules below
 
-- DATE AND MONTH FORMATTING: Always capitalize month names (January, February, March, April, May, June, July, August, September, October, November, December). Never use lowercase for month names.
+- DATE FORMATTING: NEVER include dates with month names (e.g., "December 23", "January 15"). Use ONLY day names (Monday, Tuesday, etc.) throughout the entire article. Do not include any date formats anywhere in the article.
 
-- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes. Look for text in the source that is already in quotation marks and use those exact quotes. When referencing dates in additional paragraphs, use day names (Monday, Tuesday, etc.) instead of date formats. NEVER use "today", "yesterday", "tomorrow", or "recently" - always specify the actual day name. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note. 
+- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes. Look for text in the source that is already in quotation marks and use those exact quotes. When referencing dates in additional paragraphs, use day names (Monday, Tuesday, etc.) instead of date formats. NEVER use "today", "yesterday", "tomorrow", or "recently" - always specify the actual day name. If the source is an analyst note, include specific details about earnings forecasts, financial estimates, market analysis, and investment reasoning from the note.
+
+CRITICAL: You MUST include information about OTHER companies mentioned in the source text. If the source mentions multiple companies (e.g., Doseology, Philip Morris, Zevia, Lifeway, etc.), include their:
+- Company names with ticker symbols (e.g., "Doseology Sciences Inc. (CSE:MOOD)" or "Philip Morris International (NYSE:PM)")
+- Specific quotes from their executives
+- Product launches, financial results, partnerships, or strategic announcements
+- How they relate to or provide context for ${ticker && ticker.trim() !== '' ? `the primary company (${ticker})` : 'the main story'}
+- Market trends or industry context they represent
+
+Do NOT write an article that only mentions the primary company. The source text contains multiple companies for a reason - include them to provide comprehensive market context. 
 
 CRITICAL SOURCE ATTRIBUTION RULE: You MUST include a source attribution in the second paragraph (immediately after the lead paragraph). ${sourceUrl ? (() => { const outletName = getOutletNameFromUrl(sourceUrl); console.log('Generated outlet name:', outletName, 'for URL:', sourceUrl); return `The second paragraph MUST begin with: "${outletName} <a href="${sourceUrl}">reports</a>" - you MUST include the complete HTML hyperlink format exactly as shown, but do NOT add a period after the hyperlink. Continue the sentence naturally after the hyperlink.`; })() : 'The second paragraph MUST begin with: "The company reports."'}
 
@@ -331,9 +349,11 @@ ${includeSubheads && subheadTexts && subheadTexts.length > 0 ? `
   - Second subhead: Place after approximately 50% of the content, ensuring it covers at least 2 paragraphs.
   - Third subhead: Place after approximately 80% of the content, ensuring it covers at least 2 paragraphs.
   - Each subhead must cover at least 2 paragraphs of content - do not place subheads too close together.
-  - Format each subhead as a standalone line with proper spacing before and after.
+  - CRITICAL FORMATTING: Each subhead MUST be formatted as an H2 HTML tag using this exact format: <h2>Subhead Text Here</h2>
+  - Format each subhead as a standalone line with proper spacing before and after (one empty line before and after the H2 tag).
   - Do not place subheads in the lead paragraph or immediately after the lead paragraph.
   - Subheads should reflect factual sections (e.g., "IPO Timing," "Operational Drivers," "Market Context") - not generic topics.
+  - Example format: <h2>Why This Move Changes Everything</h2>
 ` : ''}
 
 ${relatedArticles && relatedArticles.length > 0 ? `

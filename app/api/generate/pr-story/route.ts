@@ -114,12 +114,22 @@ function buildPRPrompt({ ticker, sourceText, priceSummary, sourceUrl, sourceDate
   - Second subhead: Place after approximately 50% of the content, ensuring it covers at least 2 paragraphs.
   - Third subhead: Place after approximately 80% of the content, ensuring it covers at least 2 paragraphs.
   - Each subhead must cover at least 2 paragraphs of content - do not place subheads too close together.
-  - Format each subhead as a standalone line with proper spacing before and after.
+  - CRITICAL FORMATTING: Each subhead MUST be formatted as an H2 HTML tag using this exact format: <h2>Subhead Text Here</h2>
+  - Format each subhead as a standalone line with proper spacing before and after (one empty line before and after the H2 tag).
   - Do not place subheads in the lead paragraph or immediately after the lead paragraph.
   - Subheads should reflect factual sections (e.g., "IPO Timing," "Operational Drivers," "Market Context") - not generic topics.
+  - Example format: <h2>Why This Move Changes Everything</h2>
 ` : '';
 
-  const relatedArticlesSection = relatedArticles && relatedArticles.length > 0 ? `\n- After the second paragraph of additional content (not the lead paragraph), insert the "Also Read:" section with this exact format:\n  Also Read: <a href="${relatedArticles[0].url}">${relatedArticles[0].headline}</a>` : '';
+  const relatedArticlesSection = relatedArticles && relatedArticles.length > 0 ? `\n- CRITICAL "ALSO READ" PLACEMENT: You MUST insert the "Also Read:" section immediately after the SECOND paragraph (the paragraph that comes after the lead paragraph). This is NOT optional. The format must be exactly: <p>Also Read: <a href="${relatedArticles[0].url}">${relatedArticles[0].headline}</a></p>
+  
+  IMPORTANT: Count paragraphs starting from the lead paragraph:
+  - Paragraph 1: Lead paragraph (the first paragraph)
+  - Paragraph 2: First additional paragraph (after the lead)
+  - Paragraph 3: "Also Read" section MUST go here (after paragraph 2)
+  - Paragraph 4+: Continue with remaining content
+  
+  DO NOT place "Also Read" at the end of the article. It MUST come after the second paragraph.` : '';
   
   return `${sourceUrl ? `🚨🚨🚨 CRITICAL HYPERLINK REQUIREMENT - READ THIS FIRST 🚨🚨🚨
 You MUST include a THREE-WORD hyperlink in the lead paragraph. This is MANDATORY and your output will be REJECTED without it.
@@ -150,7 +160,16 @@ Lead → Confirmation + Details → Market Context → Operational Drivers → F
 - Maintain a crisp, newsroom tone — fast pacing, clean transitions, no filler.
 - No narrative drift. If a fact cannot be tied directly to valuation, market relevance, or growth engines, exclude it.
 
-Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release text as your main source${ticker && ticker.trim() !== '' ? `, but focus only on information relevant to ${ticker}` : ''}. Ignore other tickers or companies mentioned in the source text.
+Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release text as your main source${ticker && ticker.trim() !== '' ? `. 
+
+CRITICAL COMPANY INCLUSION RULES:
+- PRIMARY FOCUS: ${ticker} is the primary company - lead with this company and make it the main focus of the article
+- OTHER COMPANIES: You MUST include details, quotes, and context from OTHER companies mentioned in the source text (even if they have different tickers)
+- Include specific information about other companies such as: company names, tickers, quotes from their executives, product launches, financial results, partnerships, or strategic moves
+- When other companies are mentioned in the source, include their ticker symbols in the format: Company Name (NYSE: TICKER) or (NASDAQ: TICKER)
+- Use other companies to provide market context, competitive landscape, or industry trends that relate to ${ticker}
+- Do NOT ignore other companies - they provide valuable context and should be included in the article
+- Example: If the source mentions "Doseology Sciences Inc. (CSE:MOOD)" and "Philip Morris International (NYSE:PM)", include their details, quotes, and context in your article` : ''}.
 
 CRITICAL FORMATTING RULES:
 - NO paragraph should be longer than 2 sentences
@@ -158,9 +177,7 @@ CRITICAL FORMATTING RULES:
 - Use HTML tags for formatting, not markdown
 
 Structure your article as follows:
-- Headline: Write a clear, engaging headline in the style of these examples (do not use bold, asterisks, or markdown headings such as # or ##; the headline should be plain text only):
-  - Federal Reserve Governor Adriana Kugler Resigns: What This Means
-  - Fed Governor Kugler Steps Down: Impact on Interest Rate Policy
+- CRITICAL: Do NOT include a headline in your output. Start directly with the lead paragraph. The headline will be handled separately.
 
 - Lead paragraph: Start with the most important news event or development from the press release. Focus on what happened, not on stock price movement. Use the full company name and ticker in this format: <strong>Company Name</strong> (NYSE: TICKER) if a specific company is involved, or focus on the news event itself if it's broader market news. The company name should be bolded using HTML <strong> tags. Do not use markdown bold (**) or asterisks elsewhere. State what happened and why it matters in exactly 2 concise sentences.
 
@@ -195,12 +212,14 @@ CRITICAL PRESS RELEASE FORMATTING:
 
 CRITICAL LEAD PARAGRAPH RULES:
 - The lead paragraph MUST be exactly 2 concise sentences maximum. Keep it tight and focused. If you have more information, create additional paragraphs.
-- ALWAYS identify the specific day when the news occurred using the day name (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday). 
-- If the source text mentions a specific date, convert it to the day name (e.g., "December 23" becomes "Tuesday" or "Wednesday" depending on the actual day).
+- ALWAYS identify the specific day when the news occurred using ONLY the day name (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday). 
+- If the source text mentions a specific date, convert it to ONLY the day name (e.g., "December 23" becomes "Tuesday" or "Wednesday" depending on the actual day).
+- CRITICAL: When mentioning the day, use ONLY the day name. NEVER include both the day name AND the date together (e.g., "on Tuesday, December 23" is WRONG - use only "on Tuesday").
+- NEVER write "on Tuesday, December 23" or "on Wednesday, Dec 23" - use ONLY the day name: "on Tuesday" or "on Wednesday".
 - If the source mentions both an announcement date and an event date, use the event date (when the actual news happened) for the lead, not the announcement date.
 - If no specific date is mentioned, use the current day name: ${getDayName()}.
 - NEVER use "today", "yesterday", "tomorrow", or "recently" - always specify the actual day name.
-- NEVER use date formats like "December 23" or "Dec 23" - always use the day name instead.
+- NEVER use date formats like "December 23", "Dec 23", or any month/day combination - always use ONLY the day name instead.
 - Do not force price movement timing if the news is not about stock price changes.
 
 - NAME FORMATTING RULES: When mentioning people's names, follow these strict rules:
@@ -208,9 +227,18 @@ CRITICAL LEAD PARAGRAPH RULES:
   * Second and subsequent references: Use only the last name without bolding (e.g., "Trump" or "Cook")
   * This applies to all people mentioned in the article, including politicians, executives, etc.
 
-- DATE AND MONTH FORMATTING: Always capitalize month names (January, February, March, April, May, June, July, August, September, October, November, December). Never use lowercase for month names.
+- DATE FORMATTING: NEVER include dates with month names (e.g., "December 23", "January 15"). Use ONLY day names (Monday, Tuesday, etc.) throughout the entire article. Do not include any date formats anywhere in the article.
 
 - Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes. Look for text in the source that is already in quotation marks and use those exact quotes. When referencing dates in additional paragraphs, use day names (Monday, Tuesday, etc.) instead of date formats. NEVER use "today", "yesterday", "tomorrow", or "recently" - always specify the actual day name.
+
+CRITICAL: You MUST include information about OTHER companies mentioned in the source text. If the source mentions multiple companies (e.g., Doseology, Philip Morris, Zevia, Lifeway, etc.), include their:
+- Company names with ticker symbols (e.g., "Doseology Sciences Inc. (CSE:MOOD)" or "Philip Morris International (NYSE:PM)")
+- Specific quotes from their executives
+- Product launches, financial results, partnerships, or strategic announcements
+- How they relate to or provide context for ${ticker && ticker.trim() !== '' ? `the primary company (${ticker})` : 'the main story'}
+- Market trends or industry context they represent
+
+Do NOT write an article that only mentions the primary company. The source text contains multiple companies for a reason - include them to provide comprehensive market context.
 
 CRITICAL: Each paragraph must be no longer than 2 sentences. If you have more information, create additional paragraphs.
 
@@ -270,7 +298,7 @@ Write the article now.`;
 export async function POST(req: Request) {
   try {
     const requestBody = await req.json();
-    const { ticker, sourceText, priceSummary, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, provider: requestedProvider } = requestBody;
+    let { ticker, sourceText, priceSummary, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, provider: requestedProvider } = requestBody;
     if (!sourceText) return NextResponse.json({ error: 'Source text is required.' }, { status: 400 });
     
     console.log(`\n🔍 PR STORY PROVIDER DEBUG:`);
@@ -280,6 +308,154 @@ export async function POST(req: Request) {
     console.log('Source text length:', sourceText.length);
     console.log('Source text preview:', sourceText.substring(0, 200));
     console.log('Ticker provided:', ticker);
+    console.log('includeSubheads:', includeSubheads);
+    console.log('subheadTexts provided:', subheadTexts ? subheadTexts.length : 0);
+    
+    // If subheads are requested but not provided, generate them automatically
+    if (includeSubheads && (!subheadTexts || subheadTexts.length === 0)) {
+      console.log('⚠️ Subheads requested but not provided. Generating subheads automatically...');
+      try {
+        // Generate a basic story first to use for subhead generation
+        const basicPrompt = buildPRPrompt({ 
+          ticker, 
+          sourceText, 
+          priceSummary: priceSummary || '', 
+          sourceUrl, 
+          sourceDateFormatted, 
+          relatedArticles: [], 
+          includeCTA: false, 
+          ctaText: '', 
+          includeSubheads: false, 
+          subheadTexts: [] 
+        });
+        
+        // Use requested provider if provided, otherwise get current
+        let currentProvider: 'openai' | 'gemini';
+        if (requestedProvider && (requestedProvider === 'openai' || requestedProvider === 'gemini')) {
+          const current = aiProvider.getCurrentProvider();
+          if (current !== requestedProvider) {
+            await aiProvider.setProvider(requestedProvider);
+          }
+          currentProvider = requestedProvider;
+        } else {
+          currentProvider = aiProvider.getCurrentProvider();
+        }
+        
+        const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
+        const maxTokens = currentProvider === 'gemini' ? 8192 : 900;
+        
+        const basicStoryResponse = await aiProvider.generateCompletion(
+          [
+            {
+              role: 'system',
+              content: 'You are a professional financial journalist for Benzinga. You MUST include at least one direct quote from the source material in every article you write.'
+            },
+            { role: 'user', content: basicPrompt }
+          ],
+          {
+            model,
+            maxTokens,
+            temperature: 0.5,
+          }
+        );
+        
+        const basicStory = basicStoryResponse.content.trim();
+        
+        if (basicStory) {
+          // Now generate subheads from the basic story
+          const subheadPrompt = `
+          You Are A Top-Tier Financial Journalist Writing For A Leading Financial News Website.
+          
+          Given The Article Below, Generate Exactly 3 Standalone Mini Headlines (H2s) That Serve As Compelling Section Introductions.
+          
+          CRITICAL REQUIREMENTS:
+          - Generate EXACTLY 3 standalone mini headlines - no more, no less.
+          - Each H2 must be a standalone mini headline that provides specific perspective on the content that follows.
+          - H2s should be 4-8 words maximum for maximum impact.
+          - Each H2 must be unique in structure and style - use variety:
+            * One could be a bold statement or insight
+            * One could be a question that creates curiosity
+            * One could be a "How to" or "Why" format
+            * One could be a data-driven observation
+            * One could be a trend or pattern identifier
+          - Make each H2 highly engaging and clickable - they should make readers want to continue reading.
+          - Focus on specific insights, trends, or actionable information rather than generic topics.
+          - Use strong, active language that conveys authority and expertise.
+          - Avoid bland, obvious, or generic headings like "Market Analysis" or "Technical Insights".
+          - Each H2 should preview a specific angle or insight that will be explored in that section.
+          - Capitalize the first letter of every word in each H2 heading.
+          - Ensure each H2 provides a unique perspective that adds value to the reader's understanding.
+          
+          Article:
+          ${basicStory}
+          
+          Generate 3 Standalone Subheads:
+          `.trim();
+          
+          const subheadResponse = await aiProvider.generateCompletion(
+            [{ role: 'user', content: subheadPrompt }],
+            {
+              model: currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini',
+              maxTokens: currentProvider === 'gemini' ? 8192 : 200,
+              temperature: 0.8,
+            }
+          );
+          
+          const h2Headings = subheadResponse.content.trim();
+          const lines = h2Headings.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+          
+          // Extract the first 3 valid H2 headings
+          const extractedH2s: string[] = [];
+          for (const line of lines) {
+            if (extractedH2s.length >= 3) break;
+            
+            // Clean the line
+            const cleanedLine = line.replace(/\*\*/g, '').replace(/^##\s*/, '').trim()
+              .split(' ')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(' ');
+            
+            if (
+              cleanedLine &&
+              cleanedLine.length >= 10 &&
+              cleanedLine.length <= 60 &&
+              !cleanedLine.includes('Article:') &&
+              !cleanedLine.includes('Generate') &&
+              !cleanedLine.includes('Examples') &&
+              !cleanedLine.includes('CRITICAL') &&
+              !cleanedLine.includes('REQUIREMENTS')
+            ) {
+              extractedH2s.push(cleanedLine);
+            }
+          }
+          
+          // If we don't have exactly 3 H2s, use fallbacks
+          const fallbackH2s = [
+            'Why This Move Changes Everything',
+            'The Hidden Signal Smart Money Sees',
+            'Three Catalysts Driving This Action',
+            'How Wall Street Is Positioning Now',
+            'The Technical Pattern That Reveals All',
+            'Why Analysts Are Suddenly Bullish',
+            'The Volume Surge That Changes Everything',
+            'Three Reasons This Rally Is Different'
+          ];
+          
+          const finalH2s = [...extractedH2s];
+          for (let i = finalH2s.length; i < 3; i++) {
+            const fallbackIndex = (i - extractedH2s.length) % fallbackH2s.length;
+            finalH2s.push(fallbackH2s[fallbackIndex]);
+          }
+          
+          subheadTexts = finalH2s.slice(0, 3);
+          console.log('✅ Generated subheads automatically:', subheadTexts);
+        }
+      } catch (subheadError) {
+        console.error('❌ Error generating subheads automatically:', subheadError);
+        // Continue without subheads if generation fails
+        includeSubheads = false;
+      }
+    }
     
     // Fetch related articles
     const relatedArticles = await fetchRelatedArticles(ticker, sourceUrl);
@@ -429,18 +605,36 @@ REGENERATE THE ENTIRE ARTICLE NOW WITH THE HYPERLINK IN THE LEAD PARAGRAPH.`;
     if (relatedArticles && relatedArticles.length > 0) {
       console.log('Related articles available:', relatedArticles.length);
       
-      // Check if "Also Read" section exists, if not add it after the second paragraph
-      if (!story.includes('Also Read:')) {
-        console.log('Adding "Also Read" section');
-        const paragraphs = story.split('</p>');
-        if (paragraphs.length >= 3) {
-          // Insert "Also Read" after the second paragraph (index 2)
-          const alsoReadSection = `<p>Also Read: <a href="${relatedArticles[0].url}">${relatedArticles[0].headline}</a></p>`;
-          paragraphs.splice(2, 0, alsoReadSection);
-          story = paragraphs.join('</p>');
-        }
+      // Check if "Also Read" section exists and is in the correct position
+      const alsoReadPattern = /<p>Also Read:.*?<\/p>/i;
+      const alsoReadMatch = story.match(alsoReadPattern);
+      const alsoReadExists = !!alsoReadMatch;
+      
+      // Find where "Also Read" currently is
+      const paragraphs = story.split('</p>').filter(p => p.trim().length > 0);
+      const alsoReadIndex = alsoReadMatch ? paragraphs.findIndex(p => p.includes('Also Read:')) : -1;
+      
+      // Target position: after the second paragraph (index 2, which is the 3rd element: lead, para1, Also Read)
+      const targetIndex = 2;
+      
+      if (alsoReadExists && alsoReadIndex === targetIndex) {
+        console.log('"Also Read" section already exists in correct position');
       } else {
-        console.log('"Also Read" section already exists');
+        // Remove existing "Also Read" if it's in the wrong place
+        if (alsoReadExists && alsoReadIndex !== -1) {
+          console.log(`Moving "Also Read" from position ${alsoReadIndex} to position ${targetIndex}`);
+          paragraphs.splice(alsoReadIndex, 1);
+        } else if (!alsoReadExists) {
+          console.log('Adding "Also Read" section');
+        }
+        
+        // Insert "Also Read" at the correct position (after second paragraph)
+        if (paragraphs.length >= 2) {
+          const alsoReadSection = `<p>Also Read: <a href="${relatedArticles[0].url}">${relatedArticles[0].headline}</a></p>`;
+          paragraphs.splice(targetIndex, 0, alsoReadSection);
+          story = paragraphs.join('</p>');
+          console.log('✅ "Also Read" section placed after second paragraph');
+        }
       }
       
       // Check if "Read Next" section exists, if not add it after context but before price action
