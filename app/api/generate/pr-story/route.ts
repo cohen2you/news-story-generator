@@ -32,6 +32,191 @@ function getDayName(dateInput?: string | Date): string {
   return date.toLocaleDateString('en-US', options);
 }
 
+// Helper function to get current day name for price action
+// Markets are closed on weekends, so return Friday for Saturday/Sunday
+function getCurrentDayName(): string {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const today = new Date();
+  const currentDay = today.getDay();
+  
+  // If it's a weekend, return Friday as the last trading day
+  if (currentDay === 0) { // Sunday
+    return 'Friday';
+  } else if (currentDay === 6) { // Saturday
+    return 'Friday';
+  } else {
+    return days[currentDay];
+  }
+}
+
+// Helper function to determine market session
+function getMarketSession(): 'premarket' | 'regular' | 'afterhours' | 'closed' {
+  const now = new Date();
+  const nyTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const hour = nyTime.getHours();
+  const minute = nyTime.getMinutes();
+  const time = hour * 100 + minute;
+  const day = nyTime.getDay();
+  
+  // Weekend
+  if (day === 0 || day === 6) {
+    return 'closed';
+  }
+  
+  // Pre-market (4:00 AM - 9:30 AM ET)
+  if (time >= 400 && time < 930) {
+    return 'premarket';
+  }
+  
+  // Regular trading (9:30 AM - 4:00 PM ET)
+  if (time >= 930 && time < 1600) {
+    return 'regular';
+  }
+  
+  // After-hours (4:00 PM - 8:00 PM ET)
+  if (time >= 1600 && time < 2000) {
+    return 'afterhours';
+  }
+  
+  // Closed (8:00 PM - 4:00 AM ET)
+  return 'closed';
+}
+
+// Helper function to fetch price data
+async function fetchPriceData(ticker: string) {
+  try {
+    const response = await fetch(`https://api.benzinga.com/api/v2/quoteDelayed?token=${BENZINGA_API_KEY}&symbols=${encodeURIComponent(ticker)}`);
+    
+    if (!response.ok) {
+      console.error('Failed to fetch price data');
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (data && typeof data === 'object') {
+      const quote = data[ticker.toUpperCase()];
+      if (quote && typeof quote === 'object') {
+        const priceData = {
+          last: quote.lastTradePrice || 0,
+          change: quote.change || 0,
+          change_percent: quote.changePercent || quote.change_percent || 0,
+          volume: quote.volume || 0,
+          high: quote.high || 0,
+          low: quote.low || 0,
+          open: quote.open || 0,
+          close: quote.close || quote.lastTradePrice || 0,
+          previousClose: quote.previousClosePrice || quote.previousClose || 0,
+          companyName: quote.companyStandardName || quote.name || ticker.toUpperCase(),
+          // Extended hours data with multiple field name support
+          extendedHoursPrice: quote.ethPrice || quote.extendedHoursPrice || quote.afterHoursPrice || quote.ahPrice || quote.extendedPrice || null,
+          extendedHoursChange: quote.ethChange || quote.extendedHoursChange || quote.afterHoursChange || quote.ahChange || quote.extendedChange || null,
+          extendedHoursChangePercent: quote.ethChangePercent || quote.extendedHoursChangePercent || quote.afterHoursChangePercent || quote.ahChangePercent || quote.extendedChangePercent || null,
+          extendedHoursTime: quote.ethTime || quote.extendedHoursTime || quote.afterHoursTime || quote.ahTime || quote.extendedTime || null,
+          extendedHoursVolume: quote.ethVolume || null
+        };
+        
+        return priceData;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching price data:', error);
+    return null;
+  }
+}
+
+// Helper function to generate price action line
+function generatePriceActionLine(ticker: string, priceData: any): string {
+  const prefix = `${ticker} Price Action:`;
+  
+  if (!priceData) {
+    return `<strong>${prefix}</strong> Price data unavailable, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+  }
+
+  const marketSession = getMarketSession();
+  const dayName = getCurrentDayName();
+  const companyName = priceData.companyName || ticker.toUpperCase();
+  
+  // Regular session data
+  // Use 'close' for regular trading hours close price (not lastTradePrice which may be extended hours)
+  const regularLast = parseFloat(priceData.close || priceData.last || 0).toFixed(2);
+  
+  // Calculate regular trading hours change percent from close and previousClose
+  let regularChangePercent: string;
+  if (priceData.previousClose && priceData.previousClose > 0 && priceData.close) {
+    // Calculate from regular hours close vs previous close
+    const regularChange = parseFloat(priceData.close) - parseFloat(priceData.previousClose);
+    const calculatedChangePercent = (regularChange / parseFloat(priceData.previousClose) * 100).toFixed(2);
+    regularChangePercent = calculatedChangePercent;
+  } else if (priceData.change && priceData.previousClose && priceData.previousClose > 0) {
+    // Fallback: calculate from change amount if close is not available
+    const calculatedChangePercent = (parseFloat(priceData.change.toString()) / parseFloat(priceData.previousClose.toString()) * 100).toFixed(2);
+    regularChangePercent = calculatedChangePercent;
+  } else {
+    // Last resort: use API field directly (but this may be extended hours)
+    const apiChangePercent = parseFloat(priceData.change_percent || 0);
+    regularChangePercent = apiChangePercent.toFixed(2);
+  }
+  
+  const regularDisplayChangePercent = regularChangePercent.startsWith('-') ? regularChangePercent.substring(1) : regularChangePercent;
+  
+  // Extended hours data
+  const hasExtendedHours = priceData.extendedHoursPrice;
+  const extPrice = hasExtendedHours ? parseFloat(priceData.extendedHoursPrice || 0).toFixed(2) : null;
+  const extChangePercent = priceData.extendedHoursChangePercent ? parseFloat(priceData.extendedHoursChangePercent || 0).toFixed(2) : null;
+  const extDisplayChangePercent = extChangePercent && extChangePercent.startsWith('-') ? extChangePercent.substring(1) : extChangePercent;
+  
+  // Calculate extended hours change if we have the price but not the change percentage
+  const regularClose = parseFloat(priceData.close || priceData.last || 0);
+  const calculatedExtChangePercent = priceData.extendedHoursPrice && !priceData.extendedHoursChangePercent ? 
+    ((parseFloat(priceData.extendedHoursPrice) - regularClose) / regularClose * 100).toFixed(2) : null;
+  
+  const finalExtChangePercent = extChangePercent || calculatedExtChangePercent;
+  const finalHasExtendedHours = priceData.extendedHoursPrice && finalExtChangePercent;
+  const finalExtDisplayChangePercent = finalExtChangePercent && finalExtChangePercent.startsWith('-') ? finalExtChangePercent.substring(1) : finalExtChangePercent;
+  
+  if (marketSession === 'regular') {
+    return `<strong>${prefix}</strong> ${companyName} shares were ${regularChangePercent.startsWith('-') ? 'down' : 'up'} ${regularDisplayChangePercent}% at $${regularLast} during regular trading hours on ${dayName}, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+  } else if (marketSession === 'premarket') {
+    // For premarket, use the change_percent field directly if available
+    if (priceData.change_percent && priceData.change_percent !== 0) {
+      const premarketChangePercent = parseFloat(priceData.change_percent).toFixed(2);
+      const premarketDisplayChangePercent = premarketChangePercent.startsWith('-') ? premarketChangePercent.substring(1) : premarketChangePercent;
+      const premarketPrice = priceData.extendedHoursPrice ? parseFloat(priceData.extendedHoursPrice).toFixed(2) : parseFloat(priceData.last).toFixed(2);
+      return `<strong>${prefix}</strong> ${companyName} shares were ${premarketChangePercent.startsWith('-') ? 'down' : 'up'} ${premarketDisplayChangePercent}% at $${premarketPrice} during pre-market trading on ${dayName}, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+    } else if (finalHasExtendedHours && finalExtChangePercent && finalExtDisplayChangePercent) {
+      return `<strong>${prefix}</strong> ${companyName} shares were ${finalExtChangePercent.startsWith('-') ? 'down' : 'up'} ${finalExtDisplayChangePercent}% at $${extPrice} during pre-market trading on ${dayName}, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+    } else if (priceData.extendedHoursPrice) {
+      // We have premarket price but no change percentage, calculate it manually
+      const previousClose = parseFloat(priceData.previousClose || priceData.close || priceData.last || 0);
+      const premarketPrice = parseFloat(priceData.extendedHoursPrice);
+      if (previousClose > 0 && premarketPrice > 0) {
+        const manualChangePercent = ((premarketPrice - previousClose) / previousClose * 100).toFixed(2);
+        const manualDisplayChangePercent = manualChangePercent.startsWith('-') ? manualChangePercent.substring(1) : manualChangePercent;
+        return `<strong>${prefix}</strong> ${companyName} shares were ${manualChangePercent.startsWith('-') ? 'down' : 'up'} ${manualDisplayChangePercent}% at $${premarketPrice.toFixed(2)} during pre-market trading on ${dayName}, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+      }
+    }
+    return `<strong>${prefix}</strong> ${companyName} shares were trading during pre-market hours on ${dayName}, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+  } else if (marketSession === 'afterhours') {
+    if (finalHasExtendedHours && finalExtChangePercent && finalExtDisplayChangePercent) {
+      // Show both regular session and after-hours changes
+      const regularDirection = regularChangePercent.startsWith('-') ? 'fell' : 'rose';
+      const extDirection = finalExtChangePercent.startsWith('-') ? 'down' : 'up';
+      
+      return `<strong>${prefix}</strong> ${companyName} shares ${regularDirection} ${regularDisplayChangePercent}% to $${regularLast} during regular trading hours, and were ${extDirection} ${finalExtDisplayChangePercent}% at $${extPrice} during after-hours trading on ${dayName}, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+    } else {
+      // Show regular session data with after-hours indication
+      const regularDirection = regularChangePercent.startsWith('-') ? 'fell' : 'rose';
+      return `<strong>${prefix}</strong> ${companyName} shares ${regularDirection} ${regularDisplayChangePercent}% to $${regularLast} during regular trading hours on ${dayName}. The stock is currently trading in after-hours session, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+    }
+  } else {
+    // Market is closed, use last regular session data
+    return `<strong>${prefix}</strong> ${companyName} shares ${regularChangePercent.startsWith('-') ? 'fell' : 'rose'} ${regularDisplayChangePercent}% to $${regularLast} during regular trading hours on ${dayName}, according to <a href="https://pro.benzinga.com">Benzinga Pro</a>.`;
+  }
+}
+
 async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promise<any[]> {
   try {
     const dateFrom = new Date();
@@ -84,15 +269,54 @@ async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promis
     
     console.log('Articles after filtering:', filteredArticles.length);
     
-    const relatedArticles = filteredArticles
-      .map((item: any) => ({
+    // Score articles for relevance based on channels and headline keywords
+    // For banking/finance articles, prioritize: Macroeconomics, Federal Reserve, Consumer Sentiment, Banking Earnings
+    const relevantChannelKeywords = [
+      'banking', 'finance', 'financial', 'economy', 'economic', 'macro', 'federal reserve', 
+      'consumer', 'sentiment', 'earnings', 'deposits', 'interest rate', 'monetary policy'
+    ];
+    
+    const scoredArticles = filteredArticles.map((item: any) => {
+      let score = 0;
+      const headline = (item.headline || item.title || '').toLowerCase();
+      const channels = Array.isArray(item.channels) ? item.channels : [];
+      
+      // Check headline for relevant keywords
+      relevantChannelKeywords.forEach(keyword => {
+        if (headline.includes(keyword)) {
+          score += 2;
+        }
+      });
+      
+      // Check channels for relevant topics
+      channels.forEach((ch: any) => {
+        const channelName = (ch.name || '').toLowerCase();
+        if (relevantChannelKeywords.some(keyword => channelName.includes(keyword))) {
+          score += 3; // Channels are more reliable indicators
+        }
+      });
+      
+      return {
         headline: item.headline || item.title || '[No Headline]',
         url: item.url,
         created: item.created,
-      }))
-      .slice(0, 5);
+        score: score
+      };
+    });
+    
+    // Sort by relevance score (highest first), then by date (newest first)
+    const sortedArticles = scoredArticles.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score; // Higher score first
+      }
+      // If scores are equal, prefer newer articles
+      return new Date(b.created).getTime() - new Date(a.created).getTime();
+    });
+    
+    const relatedArticles = sortedArticles.slice(0, 5);
     
     console.log('Final related articles:', relatedArticles.length);
+    console.log('Top related article:', relatedArticles[0]?.headline, 'Score:', relatedArticles[0]?.score);
     return relatedArticles;
   } catch (error) {
     console.error('Error fetching related articles:', error);
@@ -100,7 +324,7 @@ async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promis
   }
 }
 
-function buildPRPrompt({ ticker, sourceText, priceSummary, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts }: { ticker: string; sourceText: string; priceSummary: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[] }) {
+function buildPRPrompt({ ticker, sourceText, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts }: { ticker: string; sourceText: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[] }) {
   
   console.log('buildPRPrompt called with sourceUrl:', sourceUrl);
   console.log('sourceUrl type:', typeof sourceUrl);
@@ -114,6 +338,7 @@ function buildPRPrompt({ ticker, sourceText, priceSummary, sourceUrl, sourceDate
   - Second subhead: Place after approximately 50% of the content, ensuring it covers at least 2 paragraphs.
   - Third subhead: Place after approximately 80% of the content, ensuring it covers at least 2 paragraphs.
   - Each subhead must cover at least 2 paragraphs of content - do not place subheads too close together.
+  - CRITICAL: Each subhead section MUST have at least 2 paragraphs of content following it. If a subhead would only have 1 sentence or 1 paragraph after it, DO NOT create that subhead. Only create subheads where there is substantial content (at least 2 paragraphs) to follow.
   - CRITICAL FORMATTING: Each subhead MUST be formatted as an H2 HTML tag using this exact format: <h2>Subhead Text Here</h2>
   - Format each subhead as a standalone line with proper spacing before and after (one empty line before and after the H2 tag).
   - Do not place subheads in the lead paragraph or immediately after the lead paragraph.
@@ -139,19 +364,98 @@ You MUST include a THREE-WORD hyperlink in the lead paragraph. This is MANDATORY
 - **VERIFY**: Before submitting, check that your output contains: <a href="${sourceUrl}">
 - **YOUR OUTPUT WILL BE REJECTED IF THE HYPERLINK IS MISSING FROM THE LEAD PARAGRAPH**
 
-` : ''}You are a professional financial news writer for Benzinga. Transform the provided press release into a concise, tight Benzinga-style financial news article.
+` : ''}You are a professional financial news writer for Benzinga. Transform the provided press release into a thematic, SEO-optimized financial news article that provides value to readers, not just regurgitates the company's message.
+
+CRITICAL: SEO-FOCUSED THEMATIC APPROACH
+This is NOT a "regurgitated PR" - you are writing a thematic article that answers a query or explores a topic, with the company as a supporting data point.
+
+**THEMATIC OPENING RULE - MANDATORY:**
+- DO NOT start the article with "[Company Name] announced" or "[Company Name] revealed"
+- START with the TOPIC or TREND first (e.g., "Financial discipline is taking center stage", "AI innovation is reshaping", "Consumer savings trends")
+- THEN attribute it to the company in the second sentence
+- This captures SEO keywords immediately (e.g., "Financial discipline", "2026 resolutions") rather than just "Wells Fargo"
+
+Example of GOOD thematic opening:
+"Financial stability is dominating New Year's resolutions for 2026. New data released Tuesday by Wells Fargo (NYSE:WFC) suggests that consumers are increasingly prioritizing liquidity and debt reduction over spending, a shift that could have broader implications for the banking sector's deposit landscape."
+
+Example of BAD opening (avoid this):
+"Wells Fargo (NYSE:WFC) revealed on Tuesday that nearly all U.S. adults planning New Year's resolutions..."
+
+**KEY HIGHLIGHTS SECTION - MANDATORY:**
+After the lead paragraph and before the main content, you MUST include a "Key Survey Findings" or "Key Highlights" section that extracts numerical data from the PR and presents it as a tight, scannable bulleted list.
+
+Format:
+<h2>Key Survey Findings</h2>
+<ul>
+<li><strong>Participation Rate:</strong> [Specific percentage or number] of [demographic] are [action/trend].</li>
+<li><strong>The Top Priority:</strong> [Specific finding with data point, e.g., "70% of respondents explicitly listed 'saving more money' as their primary goal"].</li>
+<li><strong>Demographic Split:</strong> [Specific data about who this affects most, e.g., "The trend is most visible in the 'middle bracket'—Americans aged 25+ with household incomes under $100,000"].</li>
+</ul>
+
+CRITICAL FORMATTING RULES:
+- Use clear, scannable labels like "Participation Rate:", "The Top Priority:", "Demographic Split:", "Confidence & The 'Control' Factor:"
+- Extract ALL numerical data, percentages, survey results, and key metrics from the source text
+- Present them in this tight bulleted format - NO introductory paragraph before the bullets
+- Make each bullet point concise and data-driven
+- This makes the data scannable and SEO-friendly
+
+**THE INVESTOR BRIDGE SECTION - MANDATORY:**
+After presenting the facts and key highlights, you MUST include a section titled "Why This Matters for ${ticker ? ticker : '[TICKER]'} Investors" that bridges the soft news (surveys, awards, CSR) with hard stock implications.
+
+This section should:
+- Connect the PR content to the company's business model (e.g., "Survey = Deposits", "Award = Brand Value", "Partnership = Revenue Stream")
+- Explain how this news supports fundamental analysis
+- Use bullet points to break down the investment implications
+- Answer: "I'm an investor, why do I care about this survey/award/announcement?"
+
+CRITICAL FORMATTING RULE - NO REDUNDANT INTRO PARAGRAPH:
+- DO NOT include an introductory paragraph before the bullets that summarizes what the bullets will say
+- Go STRAIGHT to the H2 heading, then ONE brief contextual sentence (if needed), then the bullets
+- The bullets should stand on their own - they don't need a summary paragraph before them
+
+Format:
+<h2>Why This Matters for ${ticker ? ticker : '[TICKER]'} Investors</h2>
+<p>Beyond the [consumer advice/survey findings/announcement], this data highlights a potential fundamental tailwind for ${ticker ? ticker : '[TICKER]'}'s core [business type].</p>
+<ul>
+<li><strong>Business Metric:</strong> [How this PR relates to the metric, e.g., "Higher consumer savings rates directly translate to increased Customer Deposits, which are the bank's primary source of funding."]</li>
+<li><strong>Profit Impact:</strong> [Specific business implication, e.g., "Robust deposit inflows provide banks with a stable capital base, potentially lowering the cost of funds even as interest rates fluctuate."]</li>
+<li><strong>Market Position:</strong> [How this positions the company competitively or in the market, e.g., "By aligning its digital tools with this 'self-care' savings trend, Wells Fargo positions itself to capture a larger share of wallet from the middle-income demographic."]</li>
+</ul>
+
+CRITICAL: 
+- If the PR is "Soft News" (Awards, Surveys, CSR, Partnerships), you MUST generate this "Why This Matters" section to explain how it supports the company's core business model
+- Do NOT skip this section - it's what transforms a PR regurgitation into valuable investor content
+- Do NOT include a redundant intro paragraph that echoes what the bullets say - go straight to the heading and bullets
 
 CRITICAL QUOTE REQUIREMENT: 
 You MUST include at least one direct quote from the source material. Look for text that appears in quotation marks in the source and include it exactly as written. This is MANDATORY and takes priority over other instructions.
 
 **BENZINGA NEWS STYLE - MANDATORY:**
-Write the story in a tight, data-driven Benzinga news style. Follow these rules:
+Write the story in a thematic, SEO-optimized Benzinga news style that provides value to readers. Follow these rules:
 
-**STRUCTURE - Keep it clean and linear:**
-Lead → Confirmation + Details → Market Context → Operational Drivers → Forward-Looking Statements.
+**STRUCTURE - Thematic PR Story Format (CRITICAL ORDER):**
+1. Thematic Lead (Topic First, Company Second) → 
+2. Key Highlights/Key Survey Findings (Bulleted Data) → 
+3. Executive Perspective/Quotes & General Advice (Soft News) → 
+4. Why This Matters for [TICKER] Investors (Hard News / Conclusion) → 
+5. Price Action → 
+6. Read Next
+
+CRITICAL STRUCTURAL RULES:
+- The "Why This Matters for [TICKER] Investors" section is the CLIMAX and CONCLUSION of the article
+- DO NOT add any sections, subheads, or content AFTER the "Why This Matters" section (except Price Action and Read Next)
+- Once you tell the reader "Why this matters for the stock," the story is effectively over for an investor
+- Adding generic advice, repetitive sections, or weak content after the Investor section causes drop-off - this is called a "False Ending"
+- The flow should be: Soft News (General Advice/Quotes) → Hard News (Investor Impact) → END
+
+This structure is DISTINCT from WGO (What's Going On) stories:
+- WGO Focus: Urgency & Price Action ("Why is the stock moving now?")
+- PR Focus: Thematic & Fundamental ("What does this tell us about the company's business/market?")
 
 **CRITICAL CONTENT RULES:**
 - Do NOT repeat facts, themes, or quotes anywhere in the story. Each piece of information should appear only once.
+- MERGE redundant data points: If the same theme appears multiple times (e.g., "Control/Confidence" mentioned in Key Findings, Quotes, and later sections), consolidate them into ONE section. Do NOT repeat the same theme in multiple places.
+- Do NOT create multiple sections covering the same topic with different subheads - merge similar data points into a single, comprehensive section.
 - Do NOT broaden the narrative beyond the core topic. Avoid side tangents (e.g., unrelated industry shifts, consumer deals, secondary partnerships) unless they directly support the valuation or market impact.
 - Keep paragraphs short and focused. Each paragraph should deliver ONE idea only.
 - Use specific financial details, metrics, subscriber counts, revenue figures, contract information, or valuation numbers to ground the story. Avoid vague statements.
@@ -159,8 +463,27 @@ Lead → Confirmation + Details → Market Context → Operational Drivers → F
 - Do NOT over-explain or add background unrelated to the core valuation/IPO/news story.
 - Maintain a crisp, newsroom tone — fast pacing, clean transitions, no filler.
 - No narrative drift. If a fact cannot be tied directly to valuation, market relevance, or growth engines, exclude it.
+- CRITICAL: Do NOT add weak, repetitive sections after the "Why This Matters for [TICKER] Investors" section. That section is the conclusion - end the article there (except for Price Action and Read Next).
 
-Write a concise, fact-based news article (about 350 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release text as your main source${ticker && ticker.trim() !== '' ? `. 
+**CRITICAL: EXPLAIN WHY THIS MATTERS**
+- Every article must answer: "Why should readers care about this news?"
+- Explain the implications, impact, or importance of the announcement
+- Connect the news to broader market trends, competitive dynamics, or industry shifts
+- Highlight what makes this newsworthy beyond just reporting the facts
+- Include context about why this is important for investors, the market, or the industry
+- Explain the "so what" - what does this mean for the company, competitors, or market?
+- Use phrases like "This marks...", "This positions...", "This reflects...", "This comes as..." to explain importance
+- Don't just report what happened - explain why it matters and what it means
+- AVOID generic words like "significant", "important", "notable" - be specific about what makes it noteworthy
+
+Write a comprehensive, fact-based news article (approximately 400-500 words)${ticker && ticker.trim() !== '' ? ` about the stock with ticker: ${ticker}` : ''}. Use the provided press release text as your main source${ticker && ticker.trim() !== '' ? `. 
+
+CRITICAL ARTICLE LENGTH REQUIREMENT:
+- The article MUST be comprehensive and detailed (approximately 400-500 words)
+- Include multiple paragraphs with substantial content (at least 6-8 paragraphs beyond the lead)
+- Do NOT write a short or abbreviated article
+- Include all relevant details, quotes, and context from the source material
+- The article should be thorough and complete, not a summary
 
 CRITICAL COMPANY INCLUSION RULES:
 - PRIMARY FOCUS: ${ticker} is the primary company - lead with this company and make it the main focus of the article
@@ -179,7 +502,14 @@ CRITICAL FORMATTING RULES:
 Structure your article as follows:
 - CRITICAL: Do NOT include a headline in your output. Start directly with the lead paragraph. The headline will be handled separately.
 
-- Lead paragraph: Start with the most important news event or development from the press release. Focus on what happened, not on stock price movement. Use the full company name and ticker in this format: <strong>Company Name</strong> (NYSE: TICKER) if a specific company is involved, or focus on the news event itself if it's broader market news. The company name should be bolded using HTML <strong> tags. Do not use markdown bold (**) or asterisks elsewhere. State what happened and why it matters in exactly 2 concise sentences.
+- **Lead paragraph (Thematic Opening):** 
+  - START with the TOPIC or TREND, NOT the company name (e.g., "Financial discipline is taking center stage", "AI innovation is reshaping", "Consumer savings trends")
+  - THEN attribute to the company in the second sentence
+  - Use the full company name and ticker in this format: <strong>Company Name</strong> (NYSE: TICKER) when you first mention the company
+  - The company name should be bolded using HTML <strong> tags. Do not use markdown bold (**) or asterisks elsewhere
+  - State what happened and why it matters in exactly 2 concise sentences
+  - Focus on the thematic significance, not just "Company X announced Y"
+  - Capture SEO keywords immediately (e.g., "Financial discipline", "2026 resolutions") rather than just the company name
 
 🚨 CRITICAL PRESS RELEASE HYPERLINK RULE - MANDATORY: 
 You MUST include a THREE-WORD hyperlink to the press release source in the lead paragraph. ${sourceUrl ? `The lead paragraph MUST contain exactly one hyperlink using this exact format: <a href="${sourceUrl}">three word phrase</a> - where "three word phrase" is EXACTLY THREE WORDS (not two, not four, EXACTLY THREE) from the actual news content in your sentence. 
@@ -229,7 +559,47 @@ CRITICAL LEAD PARAGRAPH RULES:
 
 - DATE FORMATTING: NEVER include dates with month names (e.g., "December 23", "January 15"). Use ONLY day names (Monday, Tuesday, etc.) throughout the entire article. Do not include any date formats anywhere in the article.
 
-- Additional paragraphs: Provide factual details, context, and any relevant quotes${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. MANDATORY: Include at least one direct quote from the source material using quotation marks. If multiple relevant quotes exist, include up to two quotes. Look for text in the source that is already in quotation marks and use those exact quotes. When referencing dates in additional paragraphs, use day names (Monday, Tuesday, etc.) instead of date formats. NEVER use "today", "yesterday", "tomorrow", or "recently" - always specify the actual day name.
+- **Key Highlights/Key Survey Findings Section (MANDATORY):** 
+  - Immediately after the lead paragraph, include a section with the H2 heading "Key Survey Findings" or "Key Highlights"
+  - Extract ALL numerical data, percentages, survey results, and key metrics from the source text
+  - Present them as a tight, scannable bulleted list using HTML <ul> and <li> tags
+  - Use clear labels like "Participation Rate:", "The Top Priority:", "Demographic Split:", "Confidence & The 'Control' Factor:"
+  - Format: <h2>Key Survey Findings</h2><ul><li><strong>Participation Rate:</strong> [Data point].</li><li><strong>The Top Priority:</strong> [Data point].</li><li><strong>Demographic Split:</strong> [Data point].</li></ul>
+  - NO introductory paragraph before the bullets - go straight to the H2 heading and bullets
+  - Make the data scannable and SEO-friendly
+
+- **Executive Perspective/Quotes & General Advice Section (BEFORE Investor Section):**
+  - This section comes AFTER Key Findings but BEFORE "Why This Matters for [TICKER] Investors"
+  - Include at least one direct quote from the source material using quotation marks
+  - If multiple relevant quotes exist, include up to two quotes
+  - Look for text in the source that is already in quotation marks and use those exact quotes
+  - Format executive quotes with proper attribution (e.g., "Quote text," said Name, Title of Company)
+  - Include actionable advice, practical steps, or general insights from the source
+  - MERGE similar themes: If quotes mention the same theme as data in Key Findings (e.g., "Control/Confidence"), include the quote AND merge any related data points into this section rather than creating a separate redundant section
+  - You can include quotes within paragraphs or create a dedicated section with an H2 heading if the quotes are substantial
+  - This is the "Soft News" section - it provides general value before transitioning to the "Hard News" (Investor Impact)
+
+- **Why This Matters for [TICKER] Investors Section (MANDATORY):**
+  - After presenting facts and quotes, include this section with H2 heading: "Why This Matters for ${ticker ? ticker : '[TICKER]'} Investors"
+  - Bridge the soft news (surveys, awards, CSR) with hard stock implications
+  - Connect the PR content to the company's business model using bullet points
+  - Explain how this news supports fundamental analysis
+  - Answer: "I'm an investor, why do I care about this?"
+  - CRITICAL: NO redundant intro paragraph that summarizes the bullets - go straight to the H2 heading, ONE brief contextual sentence (if needed), then the bullets
+  - Format: <h2>Why This Matters for ${ticker ? ticker : '[TICKER]'} Investors</h2><p>Beyond the [context], this data highlights a potential fundamental tailwind for ${ticker ? ticker : '[TICKER]'}'s core [business type].</p><ul><li><strong>Business Metric:</strong> [Explanation].</li><li><strong>Profit Impact:</strong> [Explanation].</li><li><strong>Market Position:</strong> [Explanation].</li></ul>
+
+- **Additional paragraphs:** Provide market context, competitive dynamics, industry trends, and any other relevant details${ticker && ticker.trim() !== '' ? ` about ${ticker}` : ''}. When referencing dates in additional paragraphs, use day names (Monday, Tuesday, etc.) instead of date formats. NEVER use "today", "yesterday", "tomorrow", or "recently" - always specify the actual day name.
+
+CRITICAL: THEMATIC VALUE, NOT PR REGURGITATION
+- This article must provide VALUE to readers, not just repeat the company's message
+- Focus on the THEME or TREND first, then use the company as supporting data
+- The "Why This Matters for [TICKER] Investors" section is where you explain business implications
+- Connect the PR content to fundamental analysis: How does this survey/award/announcement relate to revenue, margins, market share, or competitive position?
+- Use specific business metrics: deposit growth, customer acquisition, brand value, cost of capital, etc.
+- Don't just report what the company said - explain what it MEANS for investors
+- Answer the "so what" question: Why should readers care about this news beyond just knowing the company made an announcement?
+- AVOID generic words like "significant", "important", "notable" - be specific and concrete about what makes it noteworthy
+- Think: "What does this tell us about the company's business/market?" not "What did the company announce?"
 
 CRITICAL: You MUST include information about OTHER companies mentioned in the source text. If the source mentions multiple companies (e.g., Doseology, Philip Morris, Zevia, Lifeway, etc.), include their:
 - Company names with ticker symbols (e.g., "Doseology Sciences Inc. (CSE:MOOD)" or "Philip Morris International (NYSE:PM)")
@@ -248,10 +618,7 @@ ${subheadsSection}
 
 ${relatedArticlesSection}
 
-${ticker && ticker.trim() !== '' ? `- At the very bottom, include the following price action summary for ${ticker} exactly as provided, but with these modifications:
-  - Bold the ticker and "Price Action:" part using HTML <strong> tags (e.g., <strong>AA Price Action:</strong>)
-  - Hyperlink "according to Benzinga Pro." to https://pro.benzinga.com/ using <a href="https://pro.benzinga.com/">according to Benzinga Pro.</a>
-${priceSummary}` : ''}
+${ticker && ticker.trim() !== '' ? `- At the very bottom, include a price action summary for ${ticker}. The price action will be automatically generated and added after the article is written, so do NOT include it in your output.` : ''}
 
 ${relatedArticles && relatedArticles.length > 0 ? `
 - After the price action, add a "Read Next:" section in its own separate paragraph with the following format:
@@ -282,12 +649,28 @@ CRITICAL HTML FORMATTING: You MUST wrap each paragraph in <p> tags. The output s
 <p>Second paragraph content.</p>
 <p>Third paragraph content.</p>
 
+CRITICAL ARTICLE COMPLETENESS REQUIREMENTS:
+- The article MUST include all required sections: lead paragraph, Key Findings, Executive Perspective/Quotes, "Why This Matters for [TICKER] Investors", and price action (if ticker provided)
+- Include at least 6-8 substantial paragraphs beyond the lead paragraph
+- Each paragraph should be informative and add value - do NOT write short, superficial paragraphs
+- Include multiple quotes from different executives when available
+- Provide comprehensive details about partnerships, products, financial results, or strategic moves
+- Include market context and industry trends when relevant
+- The article must be complete and thorough - do NOT end abruptly or leave out important information
+- Do NOT include "Read the full source article" or similar lines at the end
+- CRITICAL: The "Why This Matters for [TICKER] Investors" section is the CLIMAX and CONCLUSION
+- After the "Why This Matters" section, ONLY include Price Action and Read Next - do NOT add any additional sections, subheads, or content
+- Do NOT create a "False Ending" by adding weak, repetitive sections after the Investor analysis
+- MERGE redundant themes: If the same topic appears in multiple places (e.g., "Control/Confidence" in Key Findings, Quotes, and later), consolidate into ONE section
+- Do NOT add redundant or repetitive content at the end of the article. If a topic has already been covered in detail earlier, do NOT repeat it with a subhead and new paragraph at the end
+
 REMEMBER: 
 - NO paragraph should exceed 2 sentences. Break up longer content into multiple paragraphs.
 - The THREE-WORD hyperlink (exactly three words, not two or four) MUST appear in the lead paragraph, embedded naturally in the text.
 - Do NOT include source attributions like "reports" or "according to [publication]".
 - Write as if reporting the news directly from the press release.
 - CRITICAL: The hyperlink text MUST be exactly three words. Count the words: word1 word2 word3 = 3 words. Do NOT use two words or four words.
+- Do NOT include "Read the full source article" or similar lines at the end
 
 Source Text (Press Release):
 ${sourceText}
@@ -298,7 +681,7 @@ Write the article now.`;
 export async function POST(req: Request) {
   try {
     const requestBody = await req.json();
-    let { ticker, sourceText, priceSummary, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, provider: requestedProvider } = requestBody;
+    let { ticker, sourceText, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, provider: requestedProvider } = requestBody;
     if (!sourceText) return NextResponse.json({ error: 'Source text is required.' }, { status: 400 });
     
     console.log(`\n🔍 PR STORY PROVIDER DEBUG:`);
@@ -311,150 +694,15 @@ export async function POST(req: Request) {
     console.log('includeSubheads:', includeSubheads);
     console.log('subheadTexts provided:', subheadTexts ? subheadTexts.length : 0);
     
-    // If subheads are requested but not provided, generate them automatically
-    if (includeSubheads && (!subheadTexts || subheadTexts.length === 0)) {
-      console.log('⚠️ Subheads requested but not provided. Generating subheads automatically...');
-      try {
-        // Generate a basic story first to use for subhead generation
-        const basicPrompt = buildPRPrompt({ 
-          ticker, 
-          sourceText, 
-          priceSummary: priceSummary || '', 
-          sourceUrl, 
-          sourceDateFormatted, 
-          relatedArticles: [], 
-          includeCTA: false, 
-          ctaText: '', 
-          includeSubheads: false, 
-          subheadTexts: [] 
-        });
-        
-        // Use requested provider if provided, otherwise get current
-        let currentProvider: 'openai' | 'gemini';
-        if (requestedProvider && (requestedProvider === 'openai' || requestedProvider === 'gemini')) {
-          const current = aiProvider.getCurrentProvider();
-          if (current !== requestedProvider) {
-            await aiProvider.setProvider(requestedProvider);
-          }
-          currentProvider = requestedProvider;
-        } else {
-          currentProvider = aiProvider.getCurrentProvider();
-        }
-        
-        const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
-        const maxTokens = currentProvider === 'gemini' ? 8192 : 900;
-        
-        const basicStoryResponse = await aiProvider.generateCompletion(
-          [
-            {
-              role: 'system',
-              content: 'You are a professional financial journalist for Benzinga. You MUST include at least one direct quote from the source material in every article you write.'
-            },
-            { role: 'user', content: basicPrompt }
-          ],
-          {
-            model,
-            maxTokens,
-            temperature: 0.5,
-          }
-        );
-        
-        const basicStory = basicStoryResponse.content.trim();
-        
-        if (basicStory) {
-          // Now generate subheads from the basic story
-          const subheadPrompt = `
-          You Are A Top-Tier Financial Journalist Writing For A Leading Financial News Website.
-          
-          Given The Article Below, Generate Exactly 3 Standalone Mini Headlines (H2s) That Serve As Compelling Section Introductions.
-          
-          CRITICAL REQUIREMENTS:
-          - Generate EXACTLY 3 standalone mini headlines - no more, no less.
-          - Each H2 must be a standalone mini headline that provides specific perspective on the content that follows.
-          - H2s should be 4-8 words maximum for maximum impact.
-          - Each H2 must be unique in structure and style - use variety:
-            * One could be a bold statement or insight
-            * One could be a question that creates curiosity
-            * One could be a "How to" or "Why" format
-            * One could be a data-driven observation
-            * One could be a trend or pattern identifier
-          - Make each H2 highly engaging and clickable - they should make readers want to continue reading.
-          - Focus on specific insights, trends, or actionable information rather than generic topics.
-          - Use strong, active language that conveys authority and expertise.
-          - Avoid bland, obvious, or generic headings like "Market Analysis" or "Technical Insights".
-          - Each H2 should preview a specific angle or insight that will be explored in that section.
-          - Capitalize the first letter of every word in each H2 heading.
-          - Ensure each H2 provides a unique perspective that adds value to the reader's understanding.
-          
-          Article:
-          ${basicStory}
-          
-          Generate 3 Standalone Subheads:
-          `.trim();
-          
-          const subheadResponse = await aiProvider.generateCompletion(
-            [{ role: 'user', content: subheadPrompt }],
-            {
-              model: currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini',
-              maxTokens: currentProvider === 'gemini' ? 8192 : 200,
-              temperature: 0.8,
-            }
-          );
-          
-          const h2Headings = subheadResponse.content.trim();
-          const lines = h2Headings.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-          
-          // Extract the first 3 valid H2 headings
-          const extractedH2s: string[] = [];
-          for (const line of lines) {
-            if (extractedH2s.length >= 3) break;
-            
-            // Clean the line
-            const cleanedLine = line.replace(/\*\*/g, '').replace(/^##\s*/, '').trim()
-              .split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(' ');
-            
-            if (
-              cleanedLine &&
-              cleanedLine.length >= 10 &&
-              cleanedLine.length <= 60 &&
-              !cleanedLine.includes('Article:') &&
-              !cleanedLine.includes('Generate') &&
-              !cleanedLine.includes('Examples') &&
-              !cleanedLine.includes('CRITICAL') &&
-              !cleanedLine.includes('REQUIREMENTS')
-            ) {
-              extractedH2s.push(cleanedLine);
-            }
-          }
-          
-          // If we don't have exactly 3 H2s, use fallbacks
-          const fallbackH2s = [
-            'Why This Move Changes Everything',
-            'The Hidden Signal Smart Money Sees',
-            'Three Catalysts Driving This Action',
-            'How Wall Street Is Positioning Now',
-            'The Technical Pattern That Reveals All',
-            'Why Analysts Are Suddenly Bullish',
-            'The Volume Surge That Changes Everything',
-            'Three Reasons This Rally Is Different'
-          ];
-          
-          const finalH2s = [...extractedH2s];
-          for (let i = finalH2s.length; i < 3; i++) {
-            const fallbackIndex = (i - extractedH2s.length) % fallbackH2s.length;
-            finalH2s.push(fallbackH2s[fallbackIndex]);
-          }
-          
-          subheadTexts = finalH2s.slice(0, 3);
-          console.log('✅ Generated subheads automatically:', subheadTexts);
-        }
-      } catch (subheadError) {
-        console.error('❌ Error generating subheads automatically:', subheadError);
-        // Continue without subheads if generation fails
-        includeSubheads = false;
-      }
+    // Note: Subheads will be generated AFTER the final story is created
+    // This ensures subheads match the actual content structure
+    
+    // Fetch price data if ticker is provided
+    let priceData = null;
+    if (ticker && ticker.trim() !== '') {
+      console.log('Fetching price data for ticker:', ticker);
+      priceData = await fetchPriceData(ticker);
+      console.log('Price data fetched:', priceData ? 'Success' : 'Failed');
     }
     
     // Fetch related articles
@@ -462,7 +710,7 @@ export async function POST(req: Request) {
     console.log('Related articles fetched:', relatedArticles.length, 'articles');
     
     console.log('Building PR prompt with sourceUrl:', sourceUrl);
-    const prompt = buildPRPrompt({ ticker, sourceText, priceSummary: priceSummary || '', sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts });
+    const prompt = buildPRPrompt({ ticker, sourceText, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts });
     console.log('Related articles in prompt:', relatedArticles.length);
     console.log('First related article:', relatedArticles[0]?.headline);
     console.log('Prompt preview (first 500 chars):', prompt.substring(0, 500));
@@ -481,7 +729,7 @@ export async function POST(req: Request) {
     }
     
     const model = currentProvider === 'gemini' ? 'gemini-2.5-flash' : MODEL;
-    const maxTokens = currentProvider === 'gemini' ? 8192 : 900;
+    const maxTokens = currentProvider === 'gemini' ? 8192 : 2000; // Increased for more comprehensive articles
     
     console.log(`\n📊 AI PROVIDER for PR story generation:`);
     console.log(`   - Provider: ${currentProvider}`);
@@ -600,6 +848,10 @@ REGENERATE THE ENTIRE ARTICLE NOW WITH THE HYPERLINK IN THE LEAD PARAGRAPH.`;
       console.log('✅ Hyperlink found in story');
     }
     
+    // Remove "Read the full source article" if it appears (not part of the article)
+    story = story.replace(/Read the full source article:.*?$/gim, '');
+    story = story.replace(/Read the full source article.*?$/gim, '');
+    
     // Ensure "Also Read" and "Read Next" sections are included if related articles are available
     console.log('Processing related articles sections...');
     if (relatedArticles && relatedArticles.length > 0) {
@@ -658,6 +910,308 @@ REGENERATE THE ENTIRE ARTICLE NOW WITH THE HYPERLINK IN THE LEAD PARAGRAPH.`;
       }
     } else {
       console.log('No related articles available');
+    }
+    
+    // If subheads are requested but not provided, generate them from the final story
+    if (includeSubheads && (!subheadTexts || subheadTexts.length === 0)) {
+      console.log('⚠️ Subheads requested but not provided. Generating subheads from final story...');
+      try {
+        // Remove existing subheads from story if any (to get clean content for subhead generation)
+        const storyWithoutSubheads = story.replace(/<h2>.*?<\/h2>/gi, '');
+        
+        const subheadPrompt = `
+        You Are A Top-Tier Financial Journalist Writing For A Leading Financial News Website.
+        
+        Given The Article Below, Generate Exactly 3 Standalone Mini Headlines (H2s) That Serve As Compelling Section Introductions.
+        
+        CRITICAL REQUIREMENTS:
+        - Generate EXACTLY 3 standalone mini headlines - no more, no less.
+        - Each H2 must be a standalone mini headline that provides specific perspective on the content that follows.
+        - H2s should be 4-8 words maximum for maximum impact.
+        - Each H2 must be unique in structure and style - use variety:
+          * One could be a bold statement or insight
+          * One could be a question that creates curiosity
+          * One could be a "How to" or "Why" format
+          * One could be a data-driven observation
+          * One could be a trend or pattern identifier
+        - Make each H2 highly engaging and clickable - they should make readers want to continue reading.
+        - Focus on specific insights, trends, or actionable information rather than generic topics.
+        - Use strong, active language that conveys authority and expertise.
+        - Avoid bland, obvious, or generic headings like "Market Analysis" or "Technical Insights".
+        - Each H2 should preview a specific angle or insight that will be explored in that section.
+        - Capitalize the first letter of every word in each H2 heading.
+        - Ensure each H2 provides a unique perspective that adds value to the reader's understanding.
+        - IMPORTANT: Base your subheads on the ACTUAL content structure of the article below. Analyze what topics are covered in each section and create subheads that accurately reflect those topics.
+        - The subheads should match the content that follows them - read the article carefully to understand its structure.
+        - CRITICAL: Do NOT create subheads that duplicate or repeat topics already covered in previous sections. Each subhead must introduce a NEW or DISTINCT topic/angle.
+        - If you see content about partnerships already covered earlier, do NOT create another subhead about partnerships - find a different angle or topic.
+        - Do NOT create a subhead near the end of the article that would lead to repetitive content. The last subhead should introduce genuinely new information, not rehash what's already been said.
+        - If the article already covers a company's strategy, partnerships, or global expansion in detail, do NOT create a final subhead about "Global Strategy" or "Expanding Influence" that would just repeat that information.
+        - CRITICAL: Each subhead MUST have at least 2 paragraphs of content following it. If a subhead would only have 1 sentence or 1 paragraph after it, DO NOT create that subhead. Only generate subheads where there is substantial content (at least 2 paragraphs) available to follow the subhead.
+        
+        Article:
+        ${storyWithoutSubheads}
+        
+        Generate 3 Standalone Subheads:
+        `.trim();
+        
+        const subheadResponse = await aiProvider.generateCompletion(
+          [{ role: 'user', content: subheadPrompt }],
+          {
+            model: currentProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini',
+            maxTokens: currentProvider === 'gemini' ? 8192 : 200,
+            temperature: 0.8,
+          }
+        );
+        
+        const h2Headings = subheadResponse.content.trim();
+        const lines = h2Headings.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        // Extract the first 3 valid H2 headings
+        const extractedH2s: string[] = [];
+        for (const line of lines) {
+          if (extractedH2s.length >= 3) break;
+          
+          // Clean the line
+          const cleanedLine = line.replace(/\*\*/g, '').replace(/^##\s*/, '').trim()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+          
+          if (
+            cleanedLine &&
+            cleanedLine.length >= 10 &&
+            cleanedLine.length <= 60 &&
+            !cleanedLine.includes('Article:') &&
+            !cleanedLine.includes('Generate') &&
+            !cleanedLine.includes('Examples') &&
+            !cleanedLine.includes('CRITICAL') &&
+            !cleanedLine.includes('REQUIREMENTS')
+          ) {
+            extractedH2s.push(cleanedLine);
+          }
+        }
+        
+        // If we don't have exactly 3 H2s, use fallbacks
+        const fallbackH2s = [
+          'Why This Move Changes Everything',
+          'The Hidden Signal Smart Money Sees',
+          'Three Catalysts Driving This Action',
+          'How Wall Street Is Positioning Now',
+          'The Technical Pattern That Reveals All',
+          'Why Analysts Are Suddenly Bullish',
+          'The Volume Surge That Changes Everything',
+          'Three Reasons This Rally Is Different'
+        ];
+        
+        const finalH2s = [...extractedH2s];
+        for (let i = finalH2s.length; i < 3; i++) {
+          const fallbackIndex = (i - extractedH2s.length) % fallbackH2s.length;
+          finalH2s.push(fallbackH2s[fallbackIndex]);
+        }
+        
+        subheadTexts = finalH2s.slice(0, 3);
+        console.log('✅ Generated subheads from final story:', subheadTexts);
+        
+        // Remove "Read the full source article" if it appears (not part of the article)
+        story = story.replace(/Read the full source article:.*?$/gim, '');
+        
+        // Now insert the subheads into the story at appropriate positions
+        // Remove any existing H2 tags to get clean content
+        let cleanStory = story.replace(/<h2>.*?<\/h2>/gi, '');
+        
+        // Split into paragraphs, keeping "Also Read", "Read Next", and "Price Action" sections
+        const allParagraphs = cleanStory.split('</p>').map(p => p.trim()).filter(p => p.length > 0);
+        const paragraphs: string[] = [];
+        let alsoReadIndex = -1;
+        let readNextIndex = -1;
+        let readNextText = '';
+        let priceActionText = '';
+        
+        for (let i = 0; i < allParagraphs.length; i++) {
+          const text = allParagraphs[i].replace(/<[^>]*>/g, '').trim();
+          
+          if (text.includes('Also Read:')) {
+            alsoReadIndex = paragraphs.length; // Track where "Also Read" should be
+            paragraphs.push(allParagraphs[i] + '</p>');
+          } else if (text.includes('Read Next:')) {
+            readNextIndex = paragraphs.length; // Track where "Read Next" should be
+            readNextText = allParagraphs[i] + '</p>'; // Save it to re-insert later
+            // Don't add it to paragraphs array yet - we'll add it back at the end
+          } else if (text.includes('Price Action:')) {
+            priceActionText = allParagraphs[i] + '</p>'; // Save it to re-insert later
+            // Don't add it to paragraphs array yet - we'll add it back at the end
+          } else if (text.length > 0) {
+            paragraphs.push(allParagraphs[i] + '</p>');
+          }
+        }
+        
+        // Calculate positions for subheads
+        const totalParagraphs = paragraphs.length;
+        
+        // First subhead: After "Also Read" if it exists (which is after paragraph 2), otherwise after ~25% of content
+        const firstSubheadPos = alsoReadIndex > -1 ? 
+          alsoReadIndex + 1 : // Right after "Also Read"
+          Math.max(2, Math.floor(totalParagraphs * 0.25));
+        
+        const h2Positions = [
+          firstSubheadPos,
+          Math.max(firstSubheadPos + 2, Math.floor(totalParagraphs * 0.55)), // At least 2 paragraphs after first subhead
+          Math.max(firstSubheadPos + 4, Math.floor(totalParagraphs * 0.80))  // At least 4 paragraphs after first subhead
+        ];
+        
+        console.log(`Subhead positions calculated: ${h2Positions.join(', ')} out of ${totalParagraphs} paragraphs`);
+        
+        // Insert subheads
+        const storyWithSubheads: string[] = [];
+        let h2Index = 0;
+        
+        for (let i = 0; i < paragraphs.length; i++) {
+          storyWithSubheads.push(paragraphs[i]);
+          
+          // Insert subhead if we're at a position and have subheads left
+          if (h2Index < subheadTexts.length && i === h2Positions[h2Index] - 1) {
+            storyWithSubheads.push(`<h2>${subheadTexts[h2Index]}</h2>`);
+            console.log(`Inserted subhead ${h2Index + 1} at position ${i}: "${subheadTexts[h2Index]}"`);
+            h2Index++;
+          }
+        }
+        
+        // Re-insert "Price Action" and "Read Next" at the end if they were removed
+        if (priceActionText) {
+          storyWithSubheads.push(priceActionText);
+          console.log('✅ Re-inserted "Price Action" section at the end');
+        }
+        if (readNextText) {
+          storyWithSubheads.push(readNextText);
+          console.log('✅ Re-inserted "Read Next" section at the end');
+        }
+        
+        story = storyWithSubheads.join('\n\n');
+        
+        // Remove subhead sections that only have 1 sentence/paragraph
+        const h2Pattern = /<h2>(.*?)<\/h2>/g;
+        let match;
+        const subheadSections: Array<{subhead: string, startIndex: number, endIndex: number, paragraphCount: number}> = [];
+        
+        while ((match = h2Pattern.exec(story)) !== null) {
+          const subheadStart = match.index;
+          const subheadEnd = match.index + match[0].length;
+          
+          // Find the next subhead or end of story
+          const nextH2Match = story.substring(subheadEnd).match(/<h2>/);
+          const nextSubheadStart = nextH2Match ? subheadEnd + nextH2Match.index : story.length;
+          
+          // Get content after this subhead
+          const contentAfter = story.substring(subheadEnd, nextSubheadStart);
+          const paragraphs = contentAfter.split('</p>').filter(p => {
+            const text = p.replace(/<[^>]*>/g, '').trim();
+            return text.length > 0 && !text.includes('Price Action:') && !text.includes('Read Next:');
+          });
+          
+          subheadSections.push({
+            subhead: match[1],
+            startIndex: subheadStart,
+            endIndex: nextSubheadStart,
+            paragraphCount: paragraphs.length
+          });
+        }
+        
+        // Remove subheads that only have 1 paragraph after them (work backwards to preserve indices)
+        let removedCount = 0;
+        for (let i = subheadSections.length - 1; i >= 0; i--) {
+          const section = subheadSections[i];
+          if (section.paragraphCount < 2) {
+            // Remove this subhead and its content
+            const beforeSubhead = story.substring(0, section.startIndex);
+            const afterSection = story.substring(section.endIndex);
+            story = beforeSubhead + afterSection;
+            removedCount++;
+            console.log(`✅ Removed subhead "${section.subhead}" - only had ${section.paragraphCount} paragraph(s)`);
+          }
+        }
+        
+        if (removedCount > 0) {
+          console.log(`✅ Removed ${removedCount} subhead(s) with insufficient content`);
+        }
+        
+        // Remove redundant sections at the end - if the last subhead is followed by content that's repetitive
+        // Check if the last subhead and its content are redundant
+        const storyParts = story.split('<h2>');
+        if (storyParts.length > 1) {
+          const lastSection = storyParts[storyParts.length - 1];
+          const lastSubheadMatch = lastSection.match(/^(.*?)<\/h2>/);
+          if (lastSubheadMatch) {
+            const lastSubhead = lastSubheadMatch[1].toLowerCase();
+            const contentAfterLastSubhead = lastSection.substring(lastSubheadMatch[0].length);
+            
+            // Check if this subhead is about strategy/partnerships/expansion and the content is very short or repetitive
+            const redundantKeywords = ['strategy', 'partnership', 'expansion', 'influence', 'global', 'collaboration'];
+            const isRedundantSubhead = redundantKeywords.some(keyword => lastSubhead.includes(keyword));
+            const isShortContent = contentAfterLastSubhead.replace(/<[^>]*>/g, '').trim().length < 200;
+            
+            // If it's a redundant subhead with short/repetitive content, and there's already a price action section, remove it
+            if (isRedundantSubhead && isShortContent && story.includes('Price Action:')) {
+              const priceActionIndex = story.indexOf('Price Action:');
+              const beforeLastSubhead = story.substring(0, story.lastIndexOf('<h2>'));
+              const priceActionAndAfter = story.substring(priceActionIndex);
+              story = beforeLastSubhead + '\n\n' + priceActionAndAfter;
+              console.log('✅ Removed redundant final subhead section');
+            }
+          }
+        }
+        
+        console.log(`✅ Inserted ${h2Index} subheads into story at appropriate positions`);
+      } catch (subheadError) {
+        console.error('❌ Error generating subheads from final story:', subheadError);
+        // Continue without subheads if generation fails
+      }
+    }
+    
+    // Extract ticker from story if not provided
+    let finalTicker = ticker;
+    if (!finalTicker || finalTicker.trim() === '') {
+      // Try to extract ticker from story (look for patterns like "(NYSE: TICKER)" or "(NASDAQ: TICKER)")
+      const tickerMatch = story.match(/\((?:NYSE|NASDAQ|CSE|TSX|OTC|OTCPK|AMEX):\s*([A-Z0-9]+)\)/i);
+      if (tickerMatch && tickerMatch[1]) {
+        finalTicker = tickerMatch[1].toUpperCase();
+        console.log(`✅ Extracted ticker from story: ${finalTicker}`);
+      }
+    }
+    
+    // Fetch price data if we have a ticker (either provided or extracted)
+    let finalPriceData = priceData;
+    if (finalTicker && finalTicker.trim() !== '' && !finalPriceData) {
+      console.log('Fetching price data for extracted ticker:', finalTicker);
+      finalPriceData = await fetchPriceData(finalTicker);
+      console.log('Price data fetched:', finalPriceData ? 'Success' : 'Failed');
+    }
+    
+    // Add price action line if we have a ticker and price data
+    if (finalTicker && finalTicker.trim() !== '' && finalPriceData) {
+      const priceActionLine = generatePriceActionLine(finalTicker, finalPriceData);
+      
+      // Remove any existing price action lines
+      story = story.replace(/<p>.*?Price Action:.*?<\/p>/gi, '');
+      story = story.replace(/.*?Price Action:.*?(?=\n\n|\n<p>|$)/gi, '');
+      
+      // Find where to insert price action (before Read Next if it exists, otherwise at the end)
+      const readNextIndex = story.indexOf('Read Next:');
+      if (readNextIndex !== -1) {
+        // Insert before Read Next
+        const beforeReadNext = story.substring(0, readNextIndex).trim();
+        const readNextAndAfter = story.substring(readNextIndex);
+        story = `${beforeReadNext}\n\n<p>${priceActionLine}</p>\n\n${readNextAndAfter}`;
+      } else {
+        // Add at the end
+        story = `${story}\n\n<p>${priceActionLine}</p>`;
+      }
+      
+      console.log('✅ Added price action line to story');
+    } else if (finalTicker && finalTicker.trim() !== '') {
+      console.log('⚠️ Ticker found but price data unavailable - skipping price action');
+    } else {
+      console.log('⚠️ No ticker found in story or request - skipping price action');
     }
     
     console.log('Final story preview:', story.substring(0, 500));
