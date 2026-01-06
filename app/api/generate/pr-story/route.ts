@@ -1100,7 +1100,7 @@ REGENERATE THE ENTIRE ARTICLE NOW WITH THE HYPERLINK IN THE LEAD PARAGRAPH.`;
           
           // Find the next subhead or end of story
           const nextH2Match = story.substring(subheadEnd).match(/<h2>/);
-          const nextSubheadStart = nextH2Match ? subheadEnd + nextH2Match.index : story.length;
+          const nextSubheadStart = nextH2Match && nextH2Match.index !== undefined ? subheadEnd + nextH2Match.index : story.length;
           
           // Get content after this subhead
           const contentAfter = story.substring(subheadEnd, nextSubheadStart);
