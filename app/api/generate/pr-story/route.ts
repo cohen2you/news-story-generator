@@ -324,11 +324,16 @@ async function fetchRelatedArticles(ticker: string, excludeUrl?: string): Promis
   }
 }
 
-function buildPRPrompt({ ticker, sourceText, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts }: { ticker: string; sourceText: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[] }) {
+function buildPRPrompt({ ticker, sourceText, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts, narrative }: { ticker: string; sourceText: string; sourceUrl?: string; sourceDateFormatted?: string; relatedArticles?: any[]; includeCTA?: boolean; ctaText?: string; includeSubheads?: boolean; subheadTexts?: string[]; narrative?: { title: string; angle_type: 'competitive' | 'industry' | 'market_dynamics'; description: string; key_points: string[]; why_relevant: string; peer_companies?: string[]; peer_market_data?: Array<{ ticker: string; price_action?: any }>; company_articles?: Array<{ headline: string; url: string }>; peer_articles?: Array<{ headline: string; url: string }>; } }) {
   
   console.log('buildPRPrompt called with sourceUrl:', sourceUrl);
   console.log('sourceUrl type:', typeof sourceUrl);
   console.log('sourceUrl length:', sourceUrl?.length);
+  console.log('Narrative provided:', narrative ? 'Yes' : 'No');
+  if (narrative) {
+    console.log('Narrative angle type:', narrative.angle_type);
+    console.log('Narrative title:', narrative.title);
+  }
   
   const ctaSection = includeCTA && ctaText ? `\n- CTA Integration: After the lead paragraph, insert the following CTA exactly as provided:\n  ${ctaText}` : '';
   
@@ -356,6 +361,54 @@ function buildPRPrompt({ ticker, sourceText, sourceUrl, sourceDateFormatted, rel
   
   DO NOT place "Also Read" at the end of the article. It MUST come after the second paragraph.` : '';
   
+  // Build narrative section if narrative is provided
+  const narrativeSection = narrative ? `
+🚨🚨🚨 CRITICAL NARRATIVE ANGLE REQUIREMENT - HIGHEST PRIORITY 🚨🚨🚨
+You MUST write this article from the following narrative angle. This is MANDATORY and takes precedence over all other instructions.
+
+NARRATIVE TITLE: ${narrative.title}
+ANGLE TYPE: ${narrative.angle_type}
+DESCRIPTION: ${narrative.description}
+
+KEY POINTS TO COVER:
+${narrative.key_points.map((point, index) => `${index + 1}. ${point}`).join('\n')}
+
+WHY THIS IS RELEVANT: ${narrative.why_relevant}
+
+${narrative.peer_companies && narrative.peer_companies.length > 0 ? `
+PEER COMPANIES TO REFERENCE:
+${narrative.peer_companies.map(ticker => `- ${ticker}`).join('\n')}
+` : ''}
+
+${narrative.peer_market_data && narrative.peer_market_data.length > 0 ? `
+PEER MARKET DATA:
+${narrative.peer_market_data.map(peer => {
+  const priceInfo = peer.price_action ? ` (Price: ${peer.price_action.last || 'N/A'}, Change: ${peer.price_action.change_percent || 'N/A'}%)` : '';
+  return `- ${peer.ticker}${priceInfo}`;
+}).join('\n')}
+` : ''}
+
+${narrative.company_articles && narrative.company_articles.length > 0 ? `
+COMPANY ARTICLES TO REFERENCE:
+${narrative.company_articles.map(article => `- <a href="${article.url}">${article.headline}</a>`).join('\n')}
+` : ''}
+
+${narrative.peer_articles && narrative.peer_articles.length > 0 ? `
+PEER COMPANY ARTICLES TO REFERENCE:
+${narrative.peer_articles.map(article => `- <a href="${article.url}">${article.headline}</a>`).join('\n')}
+` : ''}
+
+CRITICAL NARRATIVE ENFORCEMENT RULES:
+1. The entire article MUST be written from the perspective of the ${narrative.angle_type} angle described above
+2. The lead paragraph MUST incorporate the narrative angle and key points
+3. You MUST reference peer companies and their market data when provided
+4. You MUST incorporate the provided articles (company and peer) into the narrative
+5. The "Why This Matters" section MUST connect the narrative angle to investment implications
+6. Do NOT write a generic PR story - this MUST be a ${narrative.angle_type} analysis
+7. The narrative angle takes precedence over standard PR story structure - adapt the structure to serve the narrative
+
+` : '';
+  
   return `${sourceUrl ? `🚨🚨🚨 CRITICAL HYPERLINK REQUIREMENT - READ THIS FIRST 🚨🚨🚨
 You MUST include a THREE-WORD hyperlink in the lead paragraph. This is MANDATORY and your output will be REJECTED without it.
 - The hyperlink MUST be: <a href="${sourceUrl}">three word phrase</a>
@@ -364,7 +417,7 @@ You MUST include a THREE-WORD hyperlink in the lead paragraph. This is MANDATORY
 - **VERIFY**: Before submitting, check that your output contains: <a href="${sourceUrl}">
 - **YOUR OUTPUT WILL BE REJECTED IF THE HYPERLINK IS MISSING FROM THE LEAD PARAGRAPH**
 
-` : ''}You are a professional financial news writer for Benzinga. Transform the provided press release into a thematic, SEO-optimized financial news article that provides value to readers, not just regurgitates the company's message.
+` : ''}${narrativeSection}You are a professional financial news writer for Benzinga. Transform the provided press release into a thematic, SEO-optimized financial news article that provides value to readers, not just regurgitates the company's message.
 
 CRITICAL: SEO-FOCUSED THEMATIC APPROACH
 This is NOT a "regurgitated PR" - you are writing a thematic article that answers a query or explores a topic, with the company as a supporting data point.
@@ -585,6 +638,7 @@ CRITICAL LEAD PARAGRAPH RULES:
   - Connect the PR content to the company's business model using bullet points
   - Explain how this news supports fundamental analysis
   - Answer: "I'm an investor, why do I care about this?"
+  ${narrative ? `- CRITICAL: This section MUST connect the ${narrative.angle_type} narrative angle to investment implications. Reference peer companies and market data when provided in the narrative.` : ''}
   - CRITICAL: NO redundant intro paragraph that summarizes the bullets - go straight to the H2 heading, ONE brief contextual sentence (if needed), then the bullets
   - Format: <h2>Why This Matters for ${ticker ? ticker : '[TICKER]'} Investors</h2><p>Beyond the [context], this data highlights a potential fundamental tailwind for ${ticker ? ticker : '[TICKER]'}'s core [business type].</p><ul><li><strong>Business Metric:</strong> [Explanation].</li><li><strong>Profit Impact:</strong> [Explanation].</li><li><strong>Market Position:</strong> [Explanation].</li></ul>
 
@@ -601,6 +655,13 @@ CRITICAL: THEMATIC VALUE, NOT PR REGURGITATION
 - AVOID generic words like "significant", "important", "notable" - be specific and concrete about what makes it noteworthy
 - Think: "What does this tell us about the company's business/market?" not "What did the company announce?"
 
+${narrative && narrative.peer_companies && narrative.peer_companies.length > 0 ? `
+CRITICAL NARRATIVE COMPANY INCLUSION:
+- You MUST prioritize and prominently feature the peer companies provided in the narrative: ${narrative.peer_companies.join(', ')}
+- Include their market data, price action, and relevant articles when provided
+- Connect these peer companies to the ${narrative.angle_type} narrative angle
+- Use peer companies to provide competitive, industry, or market dynamics context as specified in the narrative
+` : `
 CRITICAL: You MUST include information about OTHER companies mentioned in the source text. If the source mentions multiple companies (e.g., Doseology, Philip Morris, Zevia, Lifeway, etc.), include their:
 - Company names with ticker symbols (e.g., "Doseology Sciences Inc. (CSE:MOOD)" or "Philip Morris International (NYSE:PM)")
 - Specific quotes from their executives
@@ -609,6 +670,7 @@ CRITICAL: You MUST include information about OTHER companies mentioned in the so
 - Market trends or industry context they represent
 
 Do NOT write an article that only mentions the primary company. The source text contains multiple companies for a reason - include them to provide comprehensive market context.
+`}
 
 CRITICAL: Each paragraph must be no longer than 2 sentences. If you have more information, create additional paragraphs.
 
@@ -681,7 +743,7 @@ Write the article now.`;
 export async function POST(req: Request) {
   try {
     const requestBody = await req.json();
-    let { ticker, sourceText, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, provider: requestedProvider } = requestBody;
+    let { ticker, sourceText, sourceUrl, sourceDateFormatted, includeCTA, ctaText, includeSubheads, subheadTexts, provider: requestedProvider, narrative } = requestBody;
     if (!sourceText) return NextResponse.json({ error: 'Source text is required.' }, { status: 400 });
     
     console.log(`\n🔍 PR STORY PROVIDER DEBUG:`);
@@ -693,6 +755,15 @@ export async function POST(req: Request) {
     console.log('Ticker provided:', ticker);
     console.log('includeSubheads:', includeSubheads);
     console.log('subheadTexts provided:', subheadTexts ? subheadTexts.length : 0);
+    console.log('Narrative provided:', narrative ? 'Yes' : 'No');
+    if (narrative) {
+      console.log('Narrative angle type:', narrative.angle_type);
+      console.log('Narrative title:', narrative.title);
+      console.log('Peer companies:', narrative.peer_companies?.length || 0);
+      console.log('Peer market data:', narrative.peer_market_data?.length || 0);
+      console.log('Company articles:', narrative.company_articles?.length || 0);
+      console.log('Peer articles:', narrative.peer_articles?.length || 0);
+    }
     
     // Note: Subheads will be generated AFTER the final story is created
     // This ensures subheads match the actual content structure
@@ -710,7 +781,7 @@ export async function POST(req: Request) {
     console.log('Related articles fetched:', relatedArticles.length, 'articles');
     
     console.log('Building PR prompt with sourceUrl:', sourceUrl);
-    const prompt = buildPRPrompt({ ticker, sourceText, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts });
+    const prompt = buildPRPrompt({ ticker, sourceText, sourceUrl, sourceDateFormatted, relatedArticles, includeCTA, ctaText, includeSubheads, subheadTexts, narrative });
     console.log('Related articles in prompt:', relatedArticles.length);
     console.log('First related article:', relatedArticles[0]?.headline);
     console.log('Prompt preview (first 500 chars):', prompt.substring(0, 500));
